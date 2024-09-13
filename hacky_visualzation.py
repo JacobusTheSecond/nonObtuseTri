@@ -172,10 +172,10 @@ def summaryPlot(A):
     #plot
     fig, axs = plt.subplots(2, 3)
     triangulateAndPlot(A,"", axs[0, 0],  "Input")
-    triangulateAndPlot(A,"pq15D", axs[0, 1], "CDT 15")
+    triangulateAndPlot(A,"pq1U90", axs[0, 1], "OBT 1")
     triangulateAndPlot(A,"pq15", axs[0, 2],  "CCDT 15")
     triangulateAndPlot(A,"p", axs[1, 0], "D")
-    triangulateAndPlot(A,"pq30D", axs[1, 1], "CDT 30")
+    triangulateAndPlot(A,"pq30U90", axs[1, 1], "OBT 30")
     triangulateAndPlot(A,"pq30", axs[1, 2], "CCDT 30")
     plt.show()
 
