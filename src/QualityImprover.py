@@ -36,13 +36,14 @@ def numericalangles(A:Point,B:Point,C:Point):
 
     return np.array((alpha,betta,gamma))
 
-def dropAltitudesOnSegments(Aexact,Aplot,aggressive = False):
+def dropAltitudesOnSegments(Ain,Aexact,Aplot,axs,aggressive = False):
     inserted = True
     bad = []
     badTri = []
     restartIdx = 0
     completeIt = False
     foundBad = 0
+    altitudeMap = dict()
     while not (completeIt and inserted == False):
         # print(completeIt,inserted)
         if inserted == False:
@@ -50,7 +51,9 @@ def dropAltitudesOnSegments(Aexact,Aplot,aggressive = False):
         completeIt = restartIdx == 0
         if completeIt:
             foundBad = 0
+        #print(Aexact['segments'])
         B = tr.triangulate(Aplot, "p")
+        #quietShow(Ain,Aplot,Aexact,"internal",axs,False)
         inserted = False
         bad = []
         for i in range(restartIdx, len(B['triangles'])):
@@ -100,6 +103,12 @@ def dropAltitudesOnSegments(Aexact,Aplot,aggressive = False):
                     # need to split the edge
                     ap = altitudePoint(Segment(closestSegment[0], closestSegment[1]), p)
 
+                    if idxs[0] in altitudeMap:
+                        altitudeMap[idxs[0]].append(len(Aexact['vertices']))
+                    else:
+                        altitudeMap[idxs[0]] = [len(Aexact['vertices'])]
+
+
                     # add altitude point
                     Aexact['vertices'].append(ap)
                     ap1 = float(ap.x())
@@ -111,7 +120,38 @@ def dropAltitudesOnSegments(Aexact,Aplot,aggressive = False):
                     Aexact['segments'] = np.vstack((np.delete(Aexact['segments'], (closestSegmentIndex), axis=0),
                                                     np.array([[deletor[0], len(Aexact['vertices']) - 1],
                                                               [len(Aexact['vertices']) - 1, deletor[1]]])))
+
+                    #ax = quietShowHorrible(Ain,Aplot,Aexact,"internal",axs)
+                    #ax.scatter([Aplot['vertices'][idxs[0]][0]],[Aplot['vertices'][idxs[0]][1]], color='yellow', zorder=100)
+                    #ax.scatter([ap1],[ap2], color='yellow', zorder=100)
+                    #plt.show()
+
+                    #print(altitudeMap[idxs[0]])
+                    toadd = None
+                    if len(altitudeMap[idxs[0]])>1:
+                        #check if the segments, the altitude dropped into has a common point
+                        for seg in Aexact['segments']:
+                            if np.all([deletor[0],altitudeMap[idxs[0]][-2]] == seg) or np.all([altitudeMap[idxs[0]][-2],deletor[0]] == seg):
+                                assert(toadd == None)
+                                toadd = [idxs[0],deletor[0]]
+                            elif np.all([deletor[1], altitudeMap[idxs[0]][-2]] == seg) or np.all([altitudeMap[idxs[0]][-2], deletor[1]] == seg):
+                                assert (toadd == None)
+                                toadd = [idxs[0], deletor[1]]
+                    if toadd != None:
+                        revtoadd = [toadd[1],toadd[0]]
+                        alreadyExists = False
+                        for seg in Aexact['segments']:
+                            if np.all(seg == toadd) or np.all(seg == revtoadd):
+                                alreadyExists = True
+                        if not alreadyExists:
+                            Aexact['segments'] = np.vstack((Aexact['segments'],[toadd]))
+                            #ax = quietShowHorrible(Ain, Aplot, Aexact, "internal", axs)
+                            #ax.plot([Aplot['vertices'][toadd[0]][0],Aplot['vertices'][toadd[1]][0]],[Aplot['vertices'][toadd[0]][1],Aplot['vertices'][toadd[1]][1]], color='yellow',zorder=100)
+                            #ax.scatter([ap1], [ap2], color='yellow', zorder=100)
+                            #plt.show()
+
                     Aplot['segments'] = Aexact['segments']
+
                     inserted = True
                     restartIdx = i + 1
                     completeIt = restartIdx == 0
@@ -244,13 +284,28 @@ def removeNumericallyBadTriangles(Ain,Aplot,Aexact,badTri):
     Aplot['segments'] = Aexact['segments']
     return (Aplot,Aexact)
 
-def quietShow(Ain, Aplot, Aexact, name, axs):
-    pausetime = 0.03
+def quietShow(Ain, Aplot, Aexact, name, axs,withDelay=True):
+    pausetime = 0.01
+    #fig, axs = plt.subplots(1, 1)
     axs.clear()
     C = tr.triangulate(Aplot, 'p')
     plotExact(Ain, Aexact, C, name, axs)
+    #plt.show()
     plt.draw()
-    plt.pause(pausetime)
+    if withDelay:
+        plt.pause(pausetime)
+    else:
+        plt.pause(0.001)
+
+def quietShowHorrible(Ain, Aplot, Aexact, name, axs):
+    pausetime = 0.03
+    fig, axs = plt.subplots(1, 1)
+    axs.clear()
+    C = tr.triangulate(Aplot, 'p')
+    plotExact(Ain, Aexact, C, name, axs)
+    return axs
+    #plt.draw()
+    #plt.pause(pausetime)
 
 def numericalWiggle(Ain,Aplot, Aexact,verbosity=0):
     wiggleTally = 0
@@ -357,7 +412,7 @@ def parseAsSolution(Ain,Aplot,Aexact,name):
 def improveQuality(instance,withShow=True,axs=None,verbosity=0):
     if withShow:
         assert axs != None
-        plt.ion()
+        #plt.ion()
 
     #########
     #
@@ -383,13 +438,16 @@ def improveQuality(instance,withShow=True,axs=None,verbosity=0):
     #1000 rounds should always suffice, but who knows...
     for n in range(1000):
 
+        if withShow:
+            quietShow(Ain,Aplot,Aexact,instance.instance_uid,axs)
+
         #########
         #
         # Phase 1: AltitudeDropper
         #          if there are altitudes that should be dropped onto constraint segments, do it!
         #
         #########
-        inserted,foundBad,Aexact,Aplot,bad,badTri = dropAltitudesOnSegments(Aexact,Aplot)
+        inserted,foundBad,Aexact,Aplot,bad,badTri = dropAltitudesOnSegments(Ain,Aexact,Aplot,axs)
 
         if withShow:
             quietShow(Ain,Aplot,Aexact,instance.instance_uid,axs)

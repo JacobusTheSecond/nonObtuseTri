@@ -33,7 +33,7 @@ def plotExact(Ain,Aexact,B,name,ax,mark=-1):
                 t = plt.Polygon(B['vertices'][tri], color='b')
                 ax.add_patch(t)
         name += " (>90°: " + str(badCount) + ")"
-    for e in Ain['segments']:
+    for e in Aexact['segments']:
         ax.plot(*(B['vertices'][e].T), color='red', linewidth=2)
     ax.scatter(*(B['vertices'][:len(Ain['vertices'])].T), marker='.', color='black', zorder=100)
     ax.scatter(*(B['vertices'][len(Ain['vertices']):].T), marker='.', color='green', zorder=100)
@@ -143,7 +143,7 @@ def plot(A,B,name,ax,mark=-1):
     ax.set_aspect('equal')
     ax.title.set_text(name)
 
-def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solution : Cgshop2025Solution,result : VerificationResult):
+def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solution : Cgshop2025Solution,result : VerificationResult,prefix=""):
     ax.scatter(instance.points_x,instance.points_y,color="black",zorder=100)
     steinerx = [float(FieldNumber(v)) for v in solution.steiner_points_x]
     steinery = [float(FieldNumber(v)) for v in solution.steiner_points_y]
@@ -178,4 +178,4 @@ def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solutio
         x2, y2 = totalx[edge[1]], totaly[edge[1]]
         ax.plot([x1, x2], [y1, y2], color="black", linestyle="-",zorder=-1)
     ax.set_aspect("equal")
-    ax.set_title(instance.instance_uid+" #Steiner: "+str(len(steinery))+" #non-obtuse: "+str(result.num_obtuse_triangles))
+    ax.set_title(prefix+" #Steiner:"+str(len(steinery))+" #non-obtuse:"+str(result.num_obtuse_triangles))

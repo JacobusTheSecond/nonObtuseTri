@@ -18,7 +18,7 @@ def verifyAll(solname="cur_solutions.zip"):
         print(f"{solution.instance_uid}: {result}")
         assert not result.errors, "Expect no errors."
 
-def main(solname="solutions.zip"):
+def main(solname="cur_solutions.zip",otherSolution="solutions.zip"):
     filepath = Path(__file__)
     zips = filepath.parent.parent/"challenge_instances_cgshop25" / "zips"
 
