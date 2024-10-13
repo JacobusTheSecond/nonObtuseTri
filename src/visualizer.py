@@ -41,6 +41,7 @@ def showSolutions(solname="solutions.zip"):
         print(f"{solution.instance_uid}: {result}")
         plot_solution(axs,instance,solution, result)
         plt.show()
+
 plot_counter = 0
 def compareSolutions(solname1="solutions.zip",solname2="new_solutions.zip"):
     filepath = Path(__file__)
