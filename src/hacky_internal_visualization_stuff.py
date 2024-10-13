@@ -144,14 +144,14 @@ def plot(A,B,name,ax,mark=-1):
     ax.title.set_text(name)
 
 def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solution : Cgshop2025Solution,result : VerificationResult):
-    ax.scatter(instance.points_x,instance.points_y,color="black",marker='.',zorder=100)
+    ax.scatter(instance.points_x,instance.points_y,color="black",zorder=100)
     steinerx = [float(FieldNumber(v)) for v in solution.steiner_points_x]
     steinery = [float(FieldNumber(v)) for v in solution.steiner_points_y]
 
     totalx = instance.points_x + steinerx
     totaly = instance.points_y + steinery
 
-    ax.scatter(steinerx,steinery,color="green",marker='.',zorder=100)
+    ax.scatter(steinerx,steinery,color="green",zorder=100)
     for i in range(len(instance.region_boundary)):
         x1, y1 = (
             instance.points_x[instance.region_boundary[i]],
