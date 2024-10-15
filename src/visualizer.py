@@ -43,24 +43,46 @@ def showSolutions(solname="solutions.zip"):
         plt.show()
 
 plot_counter = 0
-def compareSolutions(solname1="solutions.zip",solname2="new_solutions.zip"):
+def compareSolutions(base="solutions.zip",others=["new_solutions.zip"]):
     filepath = Path(__file__)
     zips = filepath.parent.parent/"challenge_instances_cgshop25" / "zips"
 
     idb = InstanceDatabase(zips/"challenge_instances_cgshop25_rev1.zip")
 
-    sols1 = ZipSolutionIterator(zips/solname1)
-    sols2 = ZipSolutionIterator(zips/solname2)
+    sols1 = ZipSolutionIterator(zips/base)
+    othersols = []
+    for name in others:
+        othersols.append([sol for sol in ZipSolutionIterator(zips/name)])
+
+    transformedOtherSols = [[] for sol in othersols[0]]
+    #transform
+    for i in range(len(othersols)):
+        for j in range(len(othersols[0])):
+            transformedOtherSols[j].append(othersols[i][j])
+    othersols = transformedOtherSols
 
     global plot_counter
     plot_counter = 0
     zippedList = []
     diff = []
+    name = []
+    fullList = []
 
-    for a,b in zip(sols1,sols2):
-        zippedList.append([a,b])
+    for a,other in zip(sols1,othersols):
+        idx = np.argmin([len(o.steiner_points_x) for o in other])
+        #other = b if len(b.steiner_points_x) < len(c.steiner_points_x) else c
+        assert a.instance_uid == other[idx].instance_uid
+        zippedList.append([a,other[idx]])
         instance = idb[a.instance_uid]
-        diff.append(len(a.steiner_points_x) - len(b.steiner_points_x))
+        diff.append(len(a.steiner_points_x) - len(other[idx].steiner_points_x))
+        name.append(others[idx])
+        fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx]])
+
+    fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
+    zippedList = [e[0] for e in fullList]
+    diff = [e[1] for e in fullList]
+    name = [e[2] for e in fullList]
+
 
     minimum = min(diff)
     maximum = max(diff)
@@ -71,7 +93,7 @@ def compareSolutions(solname1="solutions.zip",solname2="new_solutions.zip"):
     limit = len(zippedList)
 
     fig = plt.figure()
-    gs = fig.add_gridspec(nrows=2,ncols=2,height_ratios=[1,3])
+    gs = fig.add_gridspec(nrows=2,ncols=2,height_ratios=[1,2])
     ax1 = fig.add_subplot(gs[0,:])
     ax2 = fig.add_subplot(gs[1,0])
     ax3 = fig.add_subplot(gs[1,1])
@@ -82,7 +104,35 @@ def compareSolutions(solname1="solutions.zip",solname2="new_solutions.zip"):
             if i*30+j == plot_counter:
                 ax1.text(j,i,diff[i,j],ha="center",va="center",color="blue",fontweight='bold')
             else:
-                ax1.text(j,i,diff[i,j],ha="center",va="center",color="black")
+                if diff[i,j]!=0:
+                    ax1.text(j,i,diff[i,j],ha="center",va="center",color="black")
+
+    def on_click(event):
+        if event.inaxes==ax1:
+            global plot_counter
+            plot_counter = 30 * (min(max(0,int(event.ydata+0.5)),4)) + min(max(0,int(event.xdata+0.5)),29)
+            plot_counter = min(max(0,plot_counter),149)
+            ax1.clear()
+            ax2.clear()
+            ax3.clear()
+            ax1.imshow(diff, cmap='PiYG', interpolation='nearest', vmin=-extremum, vmax=extremum)
+            for i in range(len(diff)):
+                for j in range(len(diff[i])):
+                    if i * 30 + j == plot_counter:
+                        ax1.text(j, i, diff[i, j], ha="center", va="center", color="blue", fontweight='bold')
+                    else:
+                        if diff[i, j] != 0:
+                            ax1.text(j, i, diff[i, j], ha="center", va="center", color="black")
+            sol1 = zippedList[plot_counter][0]
+            sol2 = zippedList[plot_counter][1]
+            instance = idb[sol1.instance_uid]
+            result1 = verify(instance, sol1)
+            result2 = verify(instance, sol2)
+            # print(f"{solution.instance_uid}: {result}")
+            plot_solution(ax2, instance, sol1, result1, prefix="base")
+            plot_solution(ax3, instance, sol2, result2, prefix=name[plot_counter])
+            ax1.set_title(instance.instance_uid)
+            plt.draw()
 
     def on_press(event):
         global plot_counter
@@ -108,21 +158,23 @@ def compareSolutions(solname1="solutions.zip",solname2="new_solutions.zip"):
                 if i * 30 + j == plot_counter:
                     ax1.text(j, i, diff[i, j], ha="center", va="center", color="blue", fontweight='bold')
                 else:
-                    ax1.text(j, i, diff[i, j], ha="center", va="center", color="black")
+                    if diff[i,j]!=0:
+                        ax1.text(j,i,diff[i,j],ha="center",va="center",color="black")
         sol1 = zippedList[plot_counter][0]
         sol2 = zippedList[plot_counter][1]
         instance = idb[sol1.instance_uid]
         result1 = verify(instance, sol1)
         result2 = verify(instance, sol2)
         # print(f"{solution.instance_uid}: {result}")
-        plot_solution(ax2, instance, sol1, result1,prefix="w/o cornerrule")
-        plot_solution(ax3, instance, sol2, result2,prefix="w/ cornerrule")
+        plot_solution(ax2, instance, sol1, result1,prefix="base")
+        plot_solution(ax3, instance, sol2, result2,prefix=name[plot_counter])
         ax1.set_title(instance.instance_uid)
         plt.draw()
 
 
 
     fig.canvas.mpl_connect('key_press_event',on_press)
+    fig.canvas.mpl_connect('button_press_event', on_click)
 
     sol1 = zippedList[plot_counter][0]
     sol2 = zippedList[plot_counter][1]
@@ -131,11 +183,11 @@ def compareSolutions(solname1="solutions.zip",solname2="new_solutions.zip"):
     result1 = verify(instance, sol1)
     result2 = verify(instance, sol2)
     # print(f"{solution.instance_uid}: {result}")
-    plot_solution(ax2, instance, sol1, result1,prefix="w/o cornerrule")
-    plot_solution(ax3, instance, sol2, result2,prefix="w/ cornerrule")
+    plot_solution(ax2, instance, sol1, result1,prefix="base")
+    plot_solution(ax3, instance, sol2, result2,prefix=name[plot_counter])
     ax1.set_title(instance.instance_uid)
     plt.show()
 
 if __name__=="__main__":
     #showSolutions()
-    compareSolutions()
+    compareSolutions(base="solutions.zip",others=["cornerLimit10Drop.zip","cornerLimit10DropRefine.zip","cornerLimitDrop.zip","cornerRule.zip","cornerRuleLimit.zip","cornerDynLimitDropRefine.zip","cornerLimit20DropRefine.zip","cornerNoLimitDropRefine.zip"])

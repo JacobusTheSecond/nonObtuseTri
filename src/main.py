@@ -18,30 +18,39 @@ def verifyAll(solname="cur_solutions.zip"):
         print(f"{solution.instance_uid}: {result}")
         assert not result.errors, "Expect no errors."
 
-def main(solname="cur_solutions.zip",otherSolution="solutions.zip"):
+def solveEveryInstance(solname="NoLimitRefine.zip"):
     filepath = Path(__file__)
     zips = filepath.parent.parent/"challenge_instances_cgshop25" / "zips"
 
     idb = InstanceDatabase(zips/"challenge_instances_cgshop25_rev1.zip")
 
-    if (zips/solname).exists():
-        (zips/solname).unlink()
-
     solutions = []
     i = 0
-    fig, axs = plt.subplots(1, 1)
+    axs = None
+    debugIdx = None
+    withShow = debugIdx != None
+    if withShow:
+        fig, axs = plt.subplots(1, 1)
     for instance in idb:
         i+=1
+        if debugIdx != None and i != debugIdx:
+            continue
         start = time.time()
+        #try:
         print(i,":",instance.instance_uid,":...",end='')
-        solution = improveQuality(instance,withShow=True,axs=axs)
+        solution = improveQuality(instance,withShow=withShow,axs=axs,verbosity=0 if debugIdx == None else 1)
         if solution != None:
             solutions.append(solution)
         else:
             print("Fuck instance", instance.instance_uid, end='')
         end = time.time()
-        print("Elapsed time:", end - start)
+        print("#Steiner:",len(solution.steiner_points_x),"Elapsed time:", end - start)
+        #except:
+        #    print("Some error occured")
 
+
+    if (zips/solname).exists():
+        (zips/solname).unlink()
     #Write the solutions to a new zip file
     with ZipWriter(zips/solname) as zw:
         for solution in solutions:
@@ -51,4 +60,4 @@ def main(solname="cur_solutions.zip",otherSolution="solutions.zip"):
 
 
 if __name__=="__main__":
-    main()
+    solveEveryInstance()
