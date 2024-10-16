@@ -2,6 +2,8 @@
 
 Solver and visualizer for [CG:SHOP problem 2025](https://cgshop.ibr.cs.tu-bs.de/competition/cg-shop-2025/#problem-description)
 
+![alt text](https://github.com/JacobusTheSecond/nonObtuseTri/blob/main/illustration.png?raw=true)
+
 ## The Visualizer
 ### Prerequisites
 The Visualizer does not depend on the modified `triangle` library. Simply install the CG:SHOP pyutils:
@@ -42,6 +44,3 @@ pip install --verbose git+https://github.com/CG-SHOP/pyutils25
 ```
 ### Execution
 Run `src/python main.py`. The solution by default will be written to `challenge_instances_cgshop25/zips/cur_solutions.zip`
-
-
-![alt text](https://github.com/JacobusTheSecond/nonObtuseTri/blob/main/illustration.png?raw=true)
