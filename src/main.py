@@ -3,7 +3,11 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from cgshop2025_pyutils import InstanceDatabase,ZipSolutionIterator,ZipWriter,verify
 from hacky_internal_visualization_stuff import plot_solution #internal ugly functions I dont want you to see
-from QualityImprover import improveQuality
+exact = False
+if exact:
+    from exactImprover import improveQuality
+else:
+    from QualityImprover import improveQuality
 
 def verifyAll(solname="cur_solutions.zip"):
 
@@ -18,7 +22,7 @@ def verifyAll(solname="cur_solutions.zip"):
         print(f"{solution.instance_uid}: {result}")
         assert not result.errors, "Expect no errors."
 
-def solveEveryInstance(solname="NoLimitRefine.zip"):
+def solveEveryInstance(solname="cur_solutions.zip"):
     filepath = Path(__file__)
     zips = filepath.parent.parent/"challenge_instances_cgshop25" / "zips"
 
@@ -28,26 +32,25 @@ def solveEveryInstance(solname="NoLimitRefine.zip"):
     i = 0
     axs = None
     debugIdx = None
-    withShow = debugIdx != None
+    withShow = True#debugIdx != None
     if withShow:
         fig, axs = plt.subplots(1, 1)
     for instance in idb:
         i+=1
-        if debugIdx != None and i != debugIdx:
+        if instance.instance_uid != "simple-polygon-exterior_150_1301b82e":#debugIdx != None and i != debugIdx:
             continue
         start = time.time()
-        #try:
-        print(i,":",instance.instance_uid,":...",end='')
-        solution = improveQuality(instance,withShow=withShow,axs=axs,verbosity=0 if debugIdx == None else 1)
-        if solution != None:
-            solutions.append(solution)
-        else:
-            print("Fuck instance", instance.instance_uid, end='')
-        end = time.time()
-        print("#Steiner:",len(solution.steiner_points_x),"Elapsed time:", end - start)
-        #except:
-        #    print("Some error occured")
-
+        try:
+            print(i,":",instance.instance_uid,":...",end='')
+            solution = improveQuality(instance,withShow=withShow,axs=axs,verbosity=0 if debugIdx == None else 1)
+            if solution != None:
+                solutions.append(solution)
+            else:
+                print("Fuck instance", instance.instance_uid, end='')
+            end = time.time()
+            print("#Steiner:",len(solution.steiner_points_x),"Elapsed time:", end - start)
+        except:
+            print("Some error occured")
 
     if (zips/solname).exists():
         (zips/solname).unlink()
@@ -60,4 +63,4 @@ def solveEveryInstance(solname="NoLimitRefine.zip"):
 
 
 if __name__=="__main__":
-    solveEveryInstance()
+    solveEveryInstance()#"NoLimitRefine.zip"
