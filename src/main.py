@@ -1,22 +1,29 @@
 import time
 import matplotlib.pyplot as plt
 from pathlib import Path
-from cgshop2025_pyutils import InstanceDatabase,ZipSolutionIterator,ZipWriter,verify
-from hacky_internal_visualization_stuff import plot_solution #internal ugly functions I dont want you to see
+from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
 exact = True
 if exact:
-    from exactImprover import improveQuality
+    from exactTriangulation import Triangulation
+
+    def improveQuality(instance: Cgshop2025Instance, withShow=True, axs=None, verbosity=0):
+        # print("WORK IN PROGRESS. PROCEED WITH CARE.")
+        triangulation = Triangulation(instance, withValidate=False)
+        l = len(triangulation.triangles)
+        if (withShow):
+            plt.ion()
+        return triangulation.improveQuality(axs, verbosity)
 else:
     from QualityImprover import improveQuality
 
 def verifyAll(solname="cur_solutions.zip"):
 
     filepath = Path(__file__)
-    zips = filepath.parent.parent/"challenge_instances_cgshop25" / "zips"
+    solLoc = filepath.parent.parent/"instance_solutions"
 
-    idb = InstanceDatabase(zips/"challenge_instances_cgshop25_rev1.zip")
+    idb = InstanceDatabase(filepath.parent.parent/"challenge_instances_cgshop25"/"zips"/"challenge_instances_cgshop25_rev1.zip")
 
-    for solution in ZipSolutionIterator(zips/solname):
+    for solution in ZipSolutionIterator(solLoc/solname):
         instance = idb[solution.instance_uid]
         result = verify(instance,solution)
         print(f"{solution.instance_uid}: {result}")
@@ -24,16 +31,16 @@ def verifyAll(solname="cur_solutions.zip"):
 
 def solveEveryInstance(solname="cur_solution.zip"):
     filepath = Path(__file__)
-    zips = filepath.parent.parent/"instance_solutions"
+    solLoc = filepath.parent.parent/"instance_solutions"
 
-    idb = InstanceDatabase(zips/"challenge_instances_cgshop25_rev1.zip")
+    idb = InstanceDatabase(filepath.parent.parent/"challenge_instances_cgshop25"/"zips"/"challenge_instances_cgshop25_rev1.zip")
 
     solutions = []
     i = 0
     axs = None
     debugIdx = None#88
     debugUID = None#"point-set_10_13860916"
-    withShow = True# (debugIdx != None) or (debugUID != None)
+    withShow = (debugIdx != None) or (debugUID != None)
     if withShow:
         fig, axs = plt.subplots(1, 1)
     for instance in idb:
@@ -56,10 +63,10 @@ def solveEveryInstance(solname="cur_solution.zip"):
         #except:
         #    print("Some error occured")
 
-    if (zips/solname).exists():
-        (zips/solname).unlink()
+    if (solLoc/solname).exists():
+        (solLoc/solname).unlink()
     #Write the solutions to a new zip file
-    with ZipWriter(zips/solname) as zw:
+    with ZipWriter(solLoc/solname) as zw:
         for solution in solutions:
             zw.add_solution(solution)
 
