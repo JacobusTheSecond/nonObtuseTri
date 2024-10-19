@@ -4,6 +4,9 @@ from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 def dot(X:Point, Y:Point) -> FieldNumber:
     return (X[0]*Y[0]) + (X[1]*Y[1])
 
+def distsq(x:Point,y:Point) -> FieldNumber:
+    return Segment(x,y).squared_length()
+
 #badness of triangle. If the badness is < 0, then the triangle is obtuse
 def badness(A:Point,B:Point,C:Point)->FieldNumber:
     def badnessPrimitive(A: Point, B: Point, C: Point) -> FieldNumber:

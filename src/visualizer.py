@@ -210,4 +210,4 @@ if __name__=="__main__":
     numeric_solutions = filepath.parent.parent/"instance_solutions" / "numeric_solutions"
     exact_solutions = filepath.parent.parent/"instance_solutions" / "exact_solutions"
 
-    compareSolutions(base=[v for v in numeric_solutions.iterdir()],others=[v for v in exact_solutions.iterdir()])
+    compareSolutions(base=[v for v in exact_solutions.iterdir() if v.name != "cur_solution.zip"],others=[v for v in exact_solutions.iterdir() if v.name == "cur_solution.zip"])
