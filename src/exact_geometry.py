@@ -115,6 +115,16 @@ def isOnRightSide(ab:Segment,p:Point):
         return True
     return False
 
+def onWhichSide(ab:Segment,p:Point):
+    diff = ab.target() - ab.source()
+    sourceOrth = Point(diff.y(),FieldNumber(0)-diff.x())
+    dotp = dot(p-ab.source(),sourceOrth)
+    if dotp>FieldNumber(0):
+        return "right"
+    elif dotp< FieldNumber(0):
+        return "left"
+    return "colinear"
+
 def inCircle(m:Point,rsqr:FieldNumber,p:Point):
     dotmp = dot(p-m,p-m)
     if dotmp > rsqr:
@@ -156,3 +166,562 @@ def binaryIntersection(m:Point,rsqr:FieldNumber,pq:Segment):
             else:
                 inside = mid
         return "nonexact",outside
+
+def supportingRayIntersect(seg1:Segment, seg2:Segment):
+    x1,y1 = seg1.source()
+    x2,y2 = seg1.target()
+    x3,y3 = seg2.source()
+    x4,y4 = seg2.target()
+    denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1)
+    if denom == FieldNumber(0): # parallel
+        return None
+    ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
+    if ua <= FieldNumber(0): # out of range
+        return None
+    ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
+    if ub <= FieldNumber(0): # out of range
+        return None
+    x = x1 + ua * (x2-x1)
+    y = y1 + ua * (y2-y1)
+    return Point(FieldNumber(x.exact()),FieldNumber(y.exact()))
+
+def supportingRayIntersectSegment(ray:Segment, seg:Segment):
+    x1,y1 = ray.source()
+    x2,y2 = ray.target()
+    x3,y3 = seg.source()
+    x4,y4 = seg.target()
+    denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1)
+    if denom == FieldNumber(0): # parallel
+        return None
+    ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
+    if ua < FieldNumber(0): # out of range
+        return None
+    ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
+    if ub < FieldNumber(0) or ub > FieldNumber(1): # out of range
+        return None
+    x = x1 + ua * (x2-x1)
+    y = y1 + ua * (y2-y1)
+    return Point(FieldNumber(x.exact()),FieldNumber(y.exact()))
+
+
+def _linkCanBeSolvedByVertex(points,constraint=None):
+
+    ran = range(len(points)) if constraint == None else constraint
+
+    for i in ran:
+        c = points[i]
+        solves = True
+
+        for j in range(len(points)):
+            a = points[j]
+            b = points[(j+1)%len(points)]
+
+            if isBadTriangle(a,b,c):
+                solves = False
+                break
+
+            if (colinear(Segment(a,b), c)):
+                if ((j+1)%len(points) == i or i == j):
+                    continue
+                else:
+                    solves = False
+
+        if solves:
+            return i
+    return None
+
+def findVertexCenterOfLink(points):
+    onlyLeft = True
+    onlyRight = True
+
+    for i in range(len(points)):
+        a = points[i]
+        b = points[(i+1)%len(points)]
+        c = points[(i+2)%len(points)]
+        side = onWhichSide(Segment(a,b),c)
+        if  side == "left":
+            onlyRight = False
+        elif side == "right":
+            onlyLeft = False
+
+    if (onlyLeft == False) and (onlyRight == False):
+        return "None",None
+    if onlyRight:
+        soltype,sol =  findVertexCenterOfLink(list(reversed(points)))
+        if soltype == "vertex":
+            return "vertex",len(points)-1-sol
+        else:
+            return soltype,sol
+
+    vertexSol = _linkCanBeSolvedByVertex(points)
+    if vertexSol != None:
+        return "vertex", vertexSol
+    return "None",None
+
+
+def findVertexCenterOfLinkConstrained(points,constraint=None):
+    onlyLeft = True
+    onlyRight = True
+
+    for i in range(len(points)):
+        a = points[i]
+        b = points[(i + 1) % len(points)]
+        c = points[(i + 2) % len(points)]
+        side = onWhichSide(Segment(a, b), c)
+        if side == "left":
+            onlyRight = False
+        elif side == "right":
+            onlyLeft = False
+
+    if (onlyLeft == False) and (onlyRight == False):
+        return "None", None
+    if onlyRight:
+        soltype, sol = findVertexCenterOfLinkConstrained(list(reversed(points)),[len(points)-1-constraint[0],len(points)-1-constraint[1]])
+        if soltype == "vertex":
+            return "vertex", len(points) - 1 - sol
+        else:
+            return soltype, sol
+
+    vertexSol = _linkCanBeSolvedByVertex(points,constraint)
+    if vertexSol != None:
+        return "vertex", vertexSol
+    return "None",None
+
+def roundExact(p:Point,acc=10):
+    return Point(FieldNumber(int(float(p.x()) * acc) / acc), FieldNumber(int(float(p.y()) * acc) / acc))
+
+def findCenterOfLink(points,num=0,axs=None):
+    #get orientation
+    onlyLeft = True
+    onlyRight = True
+
+    for i in range(len(points)):
+        a = points[i]
+        b = points[(i+1)%len(points)]
+        c = points[(i+2)%len(points)]
+        side = onWhichSide(Segment(a,b),c)
+        if  side == "left":
+            onlyRight = False
+        elif side == "right":
+            onlyLeft = False
+
+    if (onlyLeft == False) and (onlyRight == False):
+        return "None",None
+    if onlyRight:
+        soltype,sol =  findCenterOfLink(list(reversed(points)), num, axs)
+        if soltype == "vertex":
+            return "vertex",len(points)-1-sol
+        else:
+            return soltype,sol
+
+    vertexSol = _linkCanBeSolvedByVertex(points)
+    if vertexSol != None:
+        return "vertex", vertexSol
+
+    ran = list(range(len(points)))
+
+    orth = []
+
+    for i in range(len(ran)):
+        idx = ran[i]
+        nextIdx = ran[(i+1)%len(ran)]
+        diff = points[nextIdx] - points[idx]
+        orth.append(Point(FieldNumber(0) - diff.y(),diff.x()))
+
+    endofrays = [[] for i in range(len(ran))]
+    for i in range(len(ran)):
+        for ioff in range(2):
+            p = points[ran[(i+ioff)%len(ran)]]
+            o = orth[i]
+
+            #the points lie in convex position. we can check if the ray p,o intersects the interior by checking the neighbouring segments
+
+            rayisInside = True
+            if ioff == 0:
+                if dot(points[ran[(i+1)%len(ran)]]-p,points[ran[i-1]]-p)>= FieldNumber(0):
+                    rayisInside = False
+            else:
+                if dot(p-points[i],points[(i+2)%len(ran)]-p) <= FieldNumber(0):
+                    rayisInside = False
+
+            if rayisInside:
+
+                closestIntersect = None
+                closestDistsq = None
+                for j in range(len(ran)):
+                    if (j == (i+ioff)%len(ran)) or ((j+1)%len(ran) == (i+ioff)%len(ran)):
+                        continue
+                    a = points[ran[j]]
+                    b = points[ran[(j+1)%len(ran)]]
+
+                    inter = supportingRayIntersectSegment(Segment(p,p+o),Segment(a,b))
+                    if inter != None:
+                        distsq = Segment(p,inter).squared_length()
+                        if closestDistsq == None or distsq < closestDistsq:
+                            closestDistsq = distsq
+                            closestIntersect = inter
+                endofrays[i].append(closestIntersect)
+            else:
+                endofrays[i].append(None)
+
+
+
+    intersections = []
+    for i in range(len(ran)):
+        a = points[ran[i]]
+        b = points[ran[(i+1)%len(ran)]]
+        c = points[ran[(i+2)%len(ran)]]
+        if colinear(Segment(a,b),c):
+            continue
+        bA = badAngle(a,b,c)
+        if (bA == -1) or (bA == 1):
+            inter = altitudePoint(Segment(a,c),b)
+            dontAdd = False
+            for it in range(len(ran)):
+                if isBadTriangle(inter, points[ran[it]], points[ran[(it + 1) % len(ran)]]):
+                    dontAdd = True
+            if not dontAdd:
+                if inter not in intersections:
+                    intersections.append(inter)
+
+    global circleNum
+    circleNum = len(intersections)
+
+    for i in range(len(ran)):
+        isFirst = (i == 0)
+        for ioff in range(2):
+            for j in range(i+ioff,len(ran)):
+                for joff in range(2):
+
+                    if (endofrays[i][ioff] == None) or (endofrays[j][joff] == None):
+                        continue
+
+                    oIdx = (i + ioff)%len(ran)
+                    oJdx = (j + joff)%len(ran)
+                    if oIdx == oJdx:
+                        continue
+                    idx = ran[oIdx]
+                    jdx = ran[oJdx]
+
+                    if idx == jdx:
+                        continue
+
+                    #colinearity checks
+                    if onWhichSide(Segment(points[idx], points[idx] + orth[i]),points[(idx+1)%len(points)]) == "colinear" or onWhichSide(Segment(points[idx], points[idx] + orth[i]),points[idx-1]) == "colinear":
+                        continue
+
+
+                    #colinearity checks
+                    if onWhichSide(Segment(points[jdx], points[jdx] + orth[j]),points[(jdx+1)%len(points)]) == "colinear" or onWhichSide(Segment(points[jdx], points[jdx] + orth[j]),points[jdx-1]) == "colinear":
+                        continue
+
+                    inter = innerIntersect(points[idx],endofrays[i][ioff],points[jdx],endofrays[j][joff])
+
+                    if inter != None:
+                        dontAdd = False
+                        for it in range(len(ran)):
+                            if isBadTriangle(inter, points[ran[it]], points[ran[(it + 1) % len(ran)]]):
+                                dontAdd = True
+                        if not dontAdd:
+                            if inter not in intersections:
+                                intersections.append(inter)
+                        #axs.plot([float(points[idx].x()),float(inter.x())],[float(points[idx].y()),float(inter.y())],color="black",zorder=100000000)
+                        #axs.plot([float(points[jdx].x()),float(inter.x())],[float(points[jdx].y()),float(inter.y())],color="black",zorder=100000000)
+                        #if len(intersections) == 2:
+                        #    print(i,j,ioff,joff,idx,jdx)
+                        #    axs.scatter([float(points[idx].x()),float(points[jdx].x())],[float(points[idx].y()),float(points[jdx].y())],color="red")
+
+    global altNum
+    altNum = len(intersections)
+
+    #line-circle numerical
+    for i in range(len(ran)):
+        isFirst = (i == 0)
+        for ioff in range(2):
+
+            if endofrays[i][ioff] == None:
+                continue
+
+            idx = ran[(i+ioff)%len(ran)]
+
+            p = points[idx]
+            q = endofrays[i][ioff]
+            o = orth[i]
+
+            # colinearity checks
+            if onWhichSide(Segment(p,p+o),
+                           points[(idx + 1) % len(points)]) == "colinear" or onWhichSide(
+                    Segment(points[idx], points[idx] + orth[i]), points[idx - 1]) == "colinear":
+                continue
+
+            for j in range(len(ran)):
+                addors = []
+                m = points[ran[j]].scale(FieldNumber(0.5)) + points[ran[(j+1)%len(ran)]].scale(FieldNumber(0.5))
+                rsqr = Segment(m,points[ran[j]]).squared_length()
+                inCirc = inCircle(m,rsqr,p)
+                if inCirc == "on":
+                    #dont add vertices!
+                    #addors.append(p)
+                    #if m is in direction of o, there should be a second one
+                    dotomp = dot(o,m-p)
+                    if dotomp > FieldNumber(0):
+                        #there is a second one
+                        mid = altitudePoint(Segment(p,p+o),m)
+
+                        #if this is 0, then its colinear and addor will be the next point along the boundary, which is NOT inside
+                        if Segment(mid,m).squared_length() != 0:
+                            diff = p-mid
+                            addor = mid - diff
+                            if Segment(p,addor).squared_length() < Segment(p,q).squared_length():
+                                addors.append(addor)
+                elif inCirc == "outside":
+                    mid = altitudePoint(Segment(p,p+o),m)
+                    secondInCirc = inCircle(m,rsqr,mid)
+                    if secondInCirc == "on":
+                        #if we are tangent, we have to check that we are not inserting a vertex
+                        if not ( (mid == points[ran[j]]) or (mid == points[ran[(j+1)%len(ran)]]) ):
+                            if Segment(p,mid).squared_length() < Segment(p,q).squared_length():
+                                addors.append(mid)
+                    elif secondInCirc == "inside":
+                        ex,addor1 = binaryIntersection(m,rsqr,Segment(p,mid))
+                        diff = addor1 - mid
+                        addor2 = mid - diff
+                        if onWhichSide(Segment(points[ran[j]],points[ran[(j+1)%len(ran)]]),addor1) == "left":
+                            if Segment(p,addor1).squared_length() < Segment(p,q).squared_length():
+                                addors.append(addor1)
+                        if onWhichSide(Segment(points[ran[j]],points[ran[(j+1)%len(ran)]]),addor2) == "left":
+                            if Segment(p,addor2).squared_length() < Segment(p,q).squared_length():
+                                addors.append(addor2)
+                else:
+                    ex,addor = binaryIntersection(m,rsqr,Segment(p,q))
+                    if addor != None:
+                        addors.append(addor)
+                for addor in addors:
+                    dontAdd = False
+                    for it in range(len(ran)):
+                        if isBadTriangle(addor, points[ran[it]], points[ran[(it + 1) % len(ran)]]):
+                            dontAdd = True
+                    if not dontAdd:
+                        if addor not in intersections:
+                            intersections.append(addor)
+
+    if len(intersections) == 0:
+        return "None",None
+    else:
+        #form sum of all and add to intersections as best candidate
+        result = []
+        centroid = Point(FieldNumber(0),FieldNumber(0))
+        for inter in intersections:
+            zeroVol = False
+            for it in range(len(ran)):
+                if colinear(Segment(points[ran[it]], points[ran[(it + 1) % len(ran)]]),inter):
+                    zeroVol = True
+            if not zeroVol:
+                result.append(Point(FieldNumber(inter.x().exact()),FieldNumber(inter.y().exact())))
+                centroid = centroid + inter
+        centroid = centroid.scale(FieldNumber(1)/FieldNumber(len(intersections)))
+        #keep representation simple
+        centroid = roundExact(centroid)
+
+        if len(result) == 0:
+            return "inside",None
+
+        #print(centroid)
+
+        dontAdd = False
+        for it in range(len(ran)):
+            if isBadTriangle(centroid, points[ran[it]], points[ran[(it + 1) % len(ran)]]):
+                dontAdd = True
+        if not dontAdd:
+            if centroid not in intersections:
+                altNum += 1
+                circleNum += 1
+                return "inside",[centroid] + result
+
+        return "inside",result
+
+
+def findCenterOfLinkConstrained(points,constraintA,constraintB,num=0,axs=None):
+    #get orientation
+    onlyLeft = True
+    onlyRight = True
+
+    for i in range(len(points)):
+        a = points[i]
+        b = points[(i+1)%len(points)]
+        c = points[(i+2)%len(points)]
+        side = onWhichSide(Segment(a,b),c)
+        if  side == "left":
+            onlyRight = False
+        elif side == "right":
+            onlyLeft = False
+
+    if (onlyLeft == False) and (onlyRight == False):
+        return "None",None
+
+    if onlyRight:
+        soltype,sol = findCenterOfLinkConstrained(list(reversed(points)),len(points)-1-constraintA,len(points)-1-constraintB,num,axs)
+        if soltype == "vertex":
+            return "vertex",len(points)-1-sol
+        else:
+            return soltype,sol
+
+    vertexSol = _linkCanBeSolvedByVertex(points,[constraintA,constraintB])
+    if vertexSol != None:
+        return "vertex", vertexSol
+
+    ran = list(range(len(points)))
+
+    onBoundary = False
+    boundaryIdx = None
+
+    if ((constraintA + 1)%len(ran) == constraintB):
+        onBoundary = True
+        boundaryIdx = constraintA
+    if ((constraintB + 1)%len(ran) == constraintA):
+        onBoundary = True
+        boundaryIdx = constraintB
+
+    querySegment = Segment(points[constraintA], points[constraintB])
+
+    orth = []
+
+    for i in range(len(ran)):
+        idx = ran[i]
+        nextIdx = ran[(i+1)%len(ran)]
+        diff = points[nextIdx] - points[idx]
+        orth.append(Point(FieldNumber(0) - diff.y(),diff.x()))
+
+    intersections = []
+
+    #circle circle intersection is not needed
+    global circleNum
+    circleNum = len(intersections)
+
+    #intersect segment with rays
+    for i in range(len(ran)):
+        for ioff in range(2):
+
+            oIdx = (i + ioff) % len(ran)
+            idx = ran[oIdx]
+            p = points[idx]
+            o = orth[i]
+
+            if (idx == constraintB) or (idx == constraintA):
+                continue
+
+            inter = supportingRayIntersectSegment(Segment(p,p+o),querySegment)
+
+            if inter != None:
+                dontAdd = False
+                for it in range(len(ran)):
+                    if onBoundary and it == boundaryIdx:
+                        continue
+                    if isBadTriangle(inter, points[ran[it]], points[ran[(it + 1) % len(ran)]]):
+                        dontAdd = True
+                if not dontAdd:
+                    if inter not in intersections:
+                        intersections.append(inter)
+
+    global altNum
+    altNum = len(intersections)
+
+    #line-circle numerical
+    p = querySegment.source()
+    o = querySegment.target() - querySegment.source()
+
+    for j in range(len(ran)):
+        addors = []
+        m = points[ran[j]].scale(FieldNumber(0.5)) + points[ran[(j+1)%len(ran)]].scale(FieldNumber(0.5))
+        rsqr = Segment(m,points[ran[j]]).squared_length()
+        inCirc = inCircle(m,rsqr,p)
+        if inCirc == "on":
+            #dont add vertices!
+            #addors.append(p)
+            if inCircle(m,rsqr,p+o)!="on":
+                #if m is in direction of o, there should be a second one
+                dotomp = dot(o,m-p)
+                if dotomp > FieldNumber(0):
+                    #there is a second one
+                    mid = altitudePoint(Segment(p,p+o),m)
+
+                    #if this is 0, then its colinear and addor will be the next point along the boundary, which is NOT inside
+                    if Segment(mid,m).squared_length() != 0:
+                        diff = p-mid
+                        addors.append(mid - diff)
+        elif inCirc == "outside":
+            mid = altitudePoint(Segment(p,p+o),m)
+            secondInCirc = inCircle(m,rsqr,mid)
+            if secondInCirc == "on":
+                #if we are tangent, we have to check that we are not inserting a vertex
+                if not ( (mid == points[ran[j]]) or (mid == points[ran[(j+1)%len(ran)]]) ):
+                    addors.append(mid)
+            elif secondInCirc == "inside":
+                ex,addor1 = binaryIntersection(m,rsqr,Segment(p,mid))
+                diff = addor1 - mid
+                addor2 = mid - diff
+                if onWhichSide(Segment(points[ran[j]],points[ran[(j+1)%len(ran)]]),addor1) == "left":
+                    addors.append(addor1)
+                if onWhichSide(Segment(points[ran[j]],points[ran[(j+1)%len(ran)]]),addor2) == "left":
+                    addors.append(addor2)
+        else:
+            #p is in the circle already. then there is only one!
+            #s is upperbound on 2*r
+            s = None
+            if rsqr < FieldNumber(1):
+                s = FieldNumber(2)
+            elif rsqr < FieldNumber(2):
+                s = rsqr * FieldNumber(2)
+            else:
+                s = rsqr
+            olsqr = Segment(p,p+o).squared_length()
+            if olsqr < FieldNumber(1):
+                s = s / olsqr
+            q = p + o.scale(s)
+            #q should be guaranteed to lie outside!
+            assert(inCircle(m,rsqr,q) == "outside")
+            ex,addor = binaryIntersection(m,rsqr,Segment(p,q))
+            addors.append(addor)
+        for addor in addors:
+            dontAdd = False
+            for it in range(len(ran)):
+                if onBoundary and it == boundaryIdx:
+                    continue
+                if isBadTriangle(addor, points[ran[it]], points[ran[(it + 1) % len(ran)]]):
+                    dontAdd = True
+            if not dontAdd:
+                if addor not in intersections:
+                    intersections.append(addor)
+
+    if len(intersections) == 0:
+        return "None",None
+    else:
+        #form sum of all and add to intersections as best candidate
+        result = []
+        centroid = Point(FieldNumber(0), FieldNumber(0))
+        for inter in intersections:
+            zeroVol = False
+            for it in range(len(ran)):
+                if colinear(Segment(points[ran[it]], points[ran[(it + 1) % len(ran)]]), inter):
+                    zeroVol = True
+            if not zeroVol:
+                result.append(Point(FieldNumber(inter.x().exact()), FieldNumber(inter.y().exact())))
+                centroid = centroid + inter
+        centroid = centroid.scale(FieldNumber(1) / FieldNumber(len(intersections)))
+
+        if len(result) == 0:
+            return "None", None
+
+        # print(centroid)
+
+        dontAdd = False
+        for it in range(len(ran)):
+            if isBadTriangle(centroid, points[ran[it]], points[ran[(it + 1) % len(ran)]]):
+                dontAdd = True
+        if not dontAdd:
+            if centroid not in intersections:
+                altNum += 1
+                circleNum += 1
+                return "inside", [centroid] + result
+
+        return "inside", result

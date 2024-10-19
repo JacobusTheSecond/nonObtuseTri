@@ -43,16 +43,27 @@ def showSolutions(solname="solutions.zip"):
         plt.show()
 
 plot_counter = 0
-def compareSolutions(base="solutions.zip",others=["new_solutions.zip"]):
+def compareSolutions(base,others):
+
     filepath = Path(__file__)
-    zips = filepath.parent.parent/"challenge_instances_cgshop25" / "zips"
+    idb = InstanceDatabase(filepath.parent.parent/"challenge_instances_cgshop25"/"zips"/"challenge_instances_cgshop25_rev1.zip")
 
-    idb = InstanceDatabase(zips/"challenge_instances_cgshop25_rev1.zip")
+    #sols1 = ZipSolutionIterator(zips/base)
+    basesols = []
+    for name in base:
+        basesols.append([sol for sol in ZipSolutionIterator(name)])
 
-    sols1 = ZipSolutionIterator(zips/base)
+    transformedOtherSols = [[] for sol in basesols[0]]
+    #transform
+    for i in range(len(basesols)):
+        for j in range(len(basesols[0])):
+            transformedOtherSols[j].append(basesols[i][j])
+    basesols = transformedOtherSols
+
+
     othersols = []
     for name in others:
-        othersols.append([sol for sol in ZipSolutionIterator(zips/name)])
+        othersols.append([sol for sol in ZipSolutionIterator(name)])
 
     transformedOtherSols = [[] for sol in othersols[0]]
     #transform
@@ -65,23 +76,27 @@ def compareSolutions(base="solutions.zip",others=["new_solutions.zip"]):
     plot_counter = 0
     zippedList = []
     diff = []
+    baseName = []
     name = []
     fullList = []
 
-    for a,other in zip(sols1,othersols):
+    for bases,other in zip(basesols,othersols):
+        baseIdx = np.argmin([len(a.steiner_points_x) for a in bases])
+        a = bases[baseIdx]
         idx = np.argmin([len(o.steiner_points_x) for o in other])
         #other = b if len(b.steiner_points_x) < len(c.steiner_points_x) else c
         assert a.instance_uid == other[idx].instance_uid
         zippedList.append([a,other[idx]])
-        instance = idb[a.instance_uid]
         diff.append(len(a.steiner_points_x) - len(other[idx].steiner_points_x))
-        name.append(others[idx])
-        fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx]])
+        #baseName.append(bases[baseIdx])
+        #name.append(others[idx])
+        fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx].name,base[baseIdx].name])
 
     fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
     zippedList = [e[0] for e in fullList]
     diff = [e[1] for e in fullList]
     name = [e[2] for e in fullList]
+    baseName = [e[3] for e  in fullList]
 
 
     minimum = min(diff)
@@ -129,7 +144,7 @@ def compareSolutions(base="solutions.zip",others=["new_solutions.zip"]):
             result1 = verify(instance, sol1)
             result2 = verify(instance, sol2)
             # print(f"{solution.instance_uid}: {result}")
-            plot_solution(ax2, instance, sol1, result1, prefix="base")
+            plot_solution(ax2, instance, sol1, result1, prefix=baseName[plot_counter])
             plot_solution(ax3, instance, sol2, result2, prefix=name[plot_counter])
             ax1.set_title(instance.instance_uid)
             plt.draw()
@@ -166,7 +181,7 @@ def compareSolutions(base="solutions.zip",others=["new_solutions.zip"]):
         result1 = verify(instance, sol1)
         result2 = verify(instance, sol2)
         # print(f"{solution.instance_uid}: {result}")
-        plot_solution(ax2, instance, sol1, result1,prefix="base")
+        plot_solution(ax2, instance, sol1, result1,prefix=baseName[plot_counter])
         plot_solution(ax3, instance, sol2, result2,prefix=name[plot_counter])
         ax1.set_title(instance.instance_uid)
         plt.draw()
@@ -183,11 +198,16 @@ def compareSolutions(base="solutions.zip",others=["new_solutions.zip"]):
     result1 = verify(instance, sol1)
     result2 = verify(instance, sol2)
     # print(f"{solution.instance_uid}: {result}")
-    plot_solution(ax2, instance, sol1, result1,prefix="base")
+    plot_solution(ax2, instance, sol1, result1,prefix=baseName[plot_counter])
     plot_solution(ax3, instance, sol2, result2,prefix=name[plot_counter])
     ax1.set_title(instance.instance_uid)
     plt.show()
 
 if __name__=="__main__":
     #showSolutions()
-    compareSolutions(base="solutions.zip",others=["cornerLimit10Drop.zip","cornerLimit10DropRefine.zip","cornerLimitDrop.zip","cornerRule.zip","cornerRuleLimit.zip","cornerDynLimitDropRefine.zip","cornerLimit20DropRefine.zip","cornerNoLimitDropRefine.zip"])
+
+    filepath = Path(__file__)
+    numeric_solutions = filepath.parent.parent/"instance_solutions" / "numeric_solutions"
+    exact_solutions = filepath.parent.parent/"instance_solutions" / "exact_solutions"
+
+    compareSolutions(base=[v for v in numeric_solutions.iterdir()],others=[v for v in exact_solutions.iterdir()])
