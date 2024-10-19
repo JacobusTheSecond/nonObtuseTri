@@ -178,13 +178,13 @@ class Triangulation:
             self.localTopologyChanged[idx] = True
 
     def unsetBadness(self, triIdx):
-        if self.isBad(triIdx):
+        if not self.isBad(triIdx):
             self.badTris.remove(triIdx)
 
     def setBadness(self, triIdx):
         if self.isBad(triIdx):
             self.badTris.append(triIdx)
-        np.random.seed(133737)
+        np.random.seed(1337)
         np.random.shuffle(self.badTris)
 
     def _unsafeRemapTriangle(self,idx,source,target):
@@ -960,7 +960,7 @@ class Triangulation:
                     for triIndex in enclosedTriangles:
                         self.setCircumCenter(triIndex)
                         self.unsetBadness(triIndex)
-                    # self.validate()
+                    self.validate()
                 elif solType == "vertex":
                     # identiy the two triangles that can die
                     # if onBoundary:
@@ -969,6 +969,7 @@ class Triangulation:
                         assert( i != "dummy")
                         self.localTopologyChanged[i] = True
                     self.mergePoints(idx, link[cs])
+                    self.validate()
                     # self.validate()
                     moved = True
                     globalMoved = True
@@ -980,7 +981,7 @@ class Triangulation:
             if moved:
                 globalMoved = True
         if globalMoved:
-            # self.validate()
+            #self.validate()
             self.ensureDelauney()
         return globalMoved
 

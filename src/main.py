@@ -8,7 +8,7 @@ if exact:
 
     def improveQuality(instance: Cgshop2025Instance, withShow=True, axs=None, verbosity=0):
         # print("WORK IN PROGRESS. PROCEED WITH CARE.")
-        triangulation = Triangulation(instance, withValidate=False)
+        triangulation = Triangulation(instance, withValidate=True)
         l = len(triangulation.triangles)
         if (withShow):
             plt.ion()
