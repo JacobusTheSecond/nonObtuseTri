@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 from cgshop2025_pyutils import InstanceDatabase,ZipSolutionIterator,verify
 
-from hacky_internal_visualization_stuff import plot_solution #internal ugly functions I dont want you to see
+from hacky_internal_visualization_stuff import plot_solution
 
 
 def verifyAll(solname="solutions.zip"):
@@ -43,6 +43,32 @@ def showSolutions(solname="solutions.zip"):
         plt.show()
 
 plot_counter = 0
+
+def updatePlot(ax1,ax2,ax3,diff,extremum,zippedList,idb,name,baseName):
+    ax1.clear()
+    ax2.clear()
+    ax3.clear()
+    global plot_counter
+    ax1.imshow(diff, cmap='PiYG', interpolation='nearest', vmin=-extremum, vmax=extremum)
+    for i in range(len(diff)):
+        for j in range(len(diff[i])):
+            if i * 30 + j == plot_counter:
+                ax1.text(j, i, diff[i, j], ha="center", va="center", color="blue", fontweight='bold')
+            else:
+                if diff[i, j] != 0:
+                    ax1.text(j, i, diff[i, j], ha="center", va="center", color="black")
+
+    sol1 = zippedList[plot_counter][0]
+    sol2 = zippedList[plot_counter][1]
+
+    instance = idb[sol1.instance_uid]
+    result1 = verify(instance, sol1)
+    result2 = verify(instance, sol2)
+    # print(f"{solution.instance_uid}: {result}")
+    plot_solution(ax2, instance, sol1, result1,prefix=baseName[plot_counter])
+    plot_solution(ax3, instance, sol2, result2,prefix=name[plot_counter])
+    ax1.set_title(instance.instance_uid)
+
 def compareSolutions(base,others):
 
     filepath = Path(__file__)
@@ -92,7 +118,7 @@ def compareSolutions(base,others):
         #name.append(others[idx])
         fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx].name,base[baseIdx].name])
 
-    fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
+    #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
     zippedList = [e[0] for e in fullList]
     diff = [e[1] for e in fullList]
     name = [e[2] for e in fullList]
@@ -113,40 +139,12 @@ def compareSolutions(base,others):
     ax2 = fig.add_subplot(gs[1,0])
     ax3 = fig.add_subplot(gs[1,1])
 
-    ax1.imshow(diff,cmap='PiYG',interpolation='nearest',vmin=-extremum,vmax=extremum)
-    for i in range(len(diff)):
-        for j in range(len(diff[i])):
-            if i*30+j == plot_counter:
-                ax1.text(j,i,diff[i,j],ha="center",va="center",color="blue",fontweight='bold')
-            else:
-                if diff[i,j]!=0:
-                    ax1.text(j,i,diff[i,j],ha="center",va="center",color="black")
-
     def on_click(event):
         if event.inaxes==ax1:
             global plot_counter
             plot_counter = 30 * (min(max(0,int(event.ydata+0.5)),4)) + min(max(0,int(event.xdata+0.5)),29)
             plot_counter = min(max(0,plot_counter),149)
-            ax1.clear()
-            ax2.clear()
-            ax3.clear()
-            ax1.imshow(diff, cmap='PiYG', interpolation='nearest', vmin=-extremum, vmax=extremum)
-            for i in range(len(diff)):
-                for j in range(len(diff[i])):
-                    if i * 30 + j == plot_counter:
-                        ax1.text(j, i, diff[i, j], ha="center", va="center", color="blue", fontweight='bold')
-                    else:
-                        if diff[i, j] != 0:
-                            ax1.text(j, i, diff[i, j], ha="center", va="center", color="black")
-            sol1 = zippedList[plot_counter][0]
-            sol2 = zippedList[plot_counter][1]
-            instance = idb[sol1.instance_uid]
-            result1 = verify(instance, sol1)
-            result2 = verify(instance, sol2)
-            # print(f"{solution.instance_uid}: {result}")
-            plot_solution(ax2, instance, sol1, result1, prefix=baseName[plot_counter])
-            plot_solution(ax3, instance, sol2, result2, prefix=name[plot_counter])
-            ax1.set_title(instance.instance_uid)
+            updatePlot(ax1, ax2, ax3, diff, extremum, zippedList, idb, name, baseName)
             plt.draw()
 
     def on_press(event):
@@ -164,26 +162,7 @@ def compareSolutions(base,others):
         if event.key == 'up':
             plot_counter = max(plot_counter-30,0)
 
-        ax1.clear()
-        ax2.clear()
-        ax3.clear()
-        ax1.imshow(diff,cmap='PiYG',interpolation='nearest',vmin=-extremum,vmax=extremum)
-        for i in range(len(diff)):
-            for j in range(len(diff[i])):
-                if i * 30 + j == plot_counter:
-                    ax1.text(j, i, diff[i, j], ha="center", va="center", color="blue", fontweight='bold')
-                else:
-                    if diff[i,j]!=0:
-                        ax1.text(j,i,diff[i,j],ha="center",va="center",color="black")
-        sol1 = zippedList[plot_counter][0]
-        sol2 = zippedList[plot_counter][1]
-        instance = idb[sol1.instance_uid]
-        result1 = verify(instance, sol1)
-        result2 = verify(instance, sol2)
-        # print(f"{solution.instance_uid}: {result}")
-        plot_solution(ax2, instance, sol1, result1,prefix=baseName[plot_counter])
-        plot_solution(ax3, instance, sol2, result2,prefix=name[plot_counter])
-        ax1.set_title(instance.instance_uid)
+        updatePlot(ax1, ax2, ax3, diff, extremum, zippedList, idb, name, baseName)
         plt.draw()
 
 
@@ -191,16 +170,8 @@ def compareSolutions(base,others):
     fig.canvas.mpl_connect('key_press_event',on_press)
     fig.canvas.mpl_connect('button_press_event', on_click)
 
-    sol1 = zippedList[plot_counter][0]
-    sol2 = zippedList[plot_counter][1]
+    updatePlot(ax1,ax2,ax3,diff,extremum,zippedList,idb,name,baseName)
 
-    instance = idb[sol1.instance_uid]
-    result1 = verify(instance, sol1)
-    result2 = verify(instance, sol2)
-    # print(f"{solution.instance_uid}: {result}")
-    plot_solution(ax2, instance, sol1, result1,prefix=baseName[plot_counter])
-    plot_solution(ax3, instance, sol2, result2,prefix=name[plot_counter])
-    ax1.set_title(instance.instance_uid)
     plt.show()
 
 if __name__=="__main__":
@@ -209,5 +180,8 @@ if __name__=="__main__":
     filepath = Path(__file__)
     numeric_solutions = filepath.parent.parent/"instance_solutions" / "numeric_solutions"
     exact_solutions = filepath.parent.parent/"instance_solutions" / "exact_solutions"
+    new = filepath.parent.parent/"instance_solutions" / "newestVersion"
 
-    compareSolutions(base=[v for v in exact_solutions.iterdir() if v.name != "cur_solution.zip"],others=[v for v in exact_solutions.iterdir() if v.name == "cur_solution.zip"])
+    extractionnames = ["properEdgeContractPrepend.zip","properEdgeContract.zip"]
+
+    compareSolutions(base=[v for v in numeric_solutions.iterdir()]+[v for v in exact_solutions.iterdir() ],others=[v for v in new.iterdir()])
