@@ -144,14 +144,14 @@ def plot(A,B,name,ax,mark=-1):
     ax.title.set_text(name)
 
 def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solution : Cgshop2025Solution,result : VerificationResult,prefix=""):
-    ax.scatter(instance.points_x,instance.points_y,color="black",zorder=100)
+    ax.scatter(instance.points_x,instance.points_y,color="black",s=8,zorder=100)
     steinerx = [float(FieldNumber(v)) for v in solution.steiner_points_x]
     steinery = [float(FieldNumber(v)) for v in solution.steiner_points_y]
 
     totalx = instance.points_x + steinerx
     totaly = instance.points_y + steinery
 
-    ax.scatter(steinerx,steinery,color="green",zorder=100)
+    ax.scatter(steinerx,steinery,color="green",s=8,zorder=100)
     for i in range(len(instance.region_boundary)):
         x1, y1 = (
             instance.points_x[instance.region_boundary[i]],
@@ -165,17 +165,17 @@ def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solutio
                 instance.region_boundary[(i + 1) % len(instance.region_boundary)]
             ],
         )
-        ax.plot([x1, x2], [y1, y2], color="blue", linestyle="-",linewidth=3)
+        ax.plot([x1, x2], [y1, y2], color="blue",linewidth=3)
         # Plot constraints
     for constraint in instance.additional_constraints:
         x1, y1 = instance.points_x[constraint[0]], instance.points_y[constraint[0]]
         x2, y2 = instance.points_x[constraint[1]], instance.points_y[constraint[1]]
-        ax.plot([x1, x2], [y1, y2], color="red", linestyle="-",linewidth=3)
+        ax.plot([x1, x2], [y1, y2], color="red",linewidth=3)
 
 
     for edge in solution.edges:
         x1, y1 = totalx[edge[0]], totaly[edge[0]]
         x2, y2 = totalx[edge[1]], totaly[edge[1]]
-        ax.plot([x1, x2], [y1, y2], color="black", linestyle="-",zorder=-1)
+        ax.plot([x1, x2], [y1, y2], color="black",zorder=-1)
     ax.set_aspect("equal")
     ax.set_title(prefix+" #Steiner:"+str(len(steinery))+" #non-obtuse:"+str(result.num_obtuse_triangles))
