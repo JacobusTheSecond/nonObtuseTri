@@ -7,12 +7,15 @@ from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 
 import exact_geometry as eg
 
+import Triangulation as newTri
+
 import triangle as tr  # https://rufat.be/triangle/
 
 
 def vprint(str, verbosity=0, vLevel=0, end="\n"):
     if verbosity > vLevel:
         print(str, end=end)
+
 
 
 def convert(data):
@@ -29,9 +32,14 @@ class Triangulation:
     #####
     # in and out
     #####
-    def __init__(self, instance: Cgshop2025Instance, withValidate=False,seed=None):
+    def __init__(self, instance: Cgshop2025Instance, withValidate=False, seed=None,axs=None):
+
+        fig, triAxs = plt.subplots(1,1)
+        self.tri = newTri.Triangulation(instance,axs=triAxs)
 
         self.seed = seed
+
+        self.plotTime = 0.005
 
         self.outer = np.iinfo(int).max
         self.noneFace = self.outer - 1
@@ -44,6 +52,7 @@ class Triangulation:
         self.exactVerts = []
         self.numericVerts = []
         for x, y in zip(instance.points_x, instance.points_y):
+        #for x, y in zip(xs, ys):
             self.exactVerts.append(Point(x, y))
             self.numericVerts.append([x, y])
         self.exactVerts = np.array(self.exactVerts, dtype=Point)
@@ -60,7 +69,7 @@ class Triangulation:
 
         self.badTris = [idx for idx in range(len(self.triangles)) if self.isBad(idx)]
 
-        self.localTopologyChanged = [True for v in self.exactVerts]
+        self.pointTopologyChanged = [True for v in self.exactVerts]
 
         self.voronoiEdges = [[] for tri in self.triangles]
         self.constrainedMask = [[] for tri in self.triangles]
@@ -80,17 +89,34 @@ class Triangulation:
                 for j in fullMap[edge[0]][edge[1]]:
                     if i != j:
                         self.voronoiEdges[i].append(j)
-                        self.constrainedMask[i].append(self.getSegmentIdx(edge))
+                        self.constrainedMask[i].append(self.getSegmentIdx(np.array(edge)))
                         added = True
                 if not added:
                     self.voronoiEdges[i].append(self.outer)
-                    self.constrainedMask[i].append(self.getSegmentIdx(edge))
+                    self.constrainedMask[i].append(self.getSegmentIdx(np.array(edge)))
         self.constrainedMask = np.array(self.constrainedMask, dtype=int)
         self.voronoiEdges = np.array(self.voronoiEdges, dtype=int)
+
+        self.edgeTopologyChanged = np.full(self.triangles.shape,True)
 
         self.circumCenters = [eg.circumcenter(*self.exactVerts[tri]) for tri in self.triangles]
         self.circumRadiiSqr = [eg.distsq(self.point(self.triangles[i][0]), self.circumCenters[i]) for i in
                                range(len(self.triangles))]
+
+        self.closestToCC = []
+        self.closestDist = []
+        for triIdx in range(len(self.triangles)):
+            closest = None
+            closestdist = None
+            for vIdx in range(len(self.exactVerts)):
+                dist = eg.distsq(self.circumCenters[triIdx], self.point(vIdx))
+                if (closest is None) or (dist < closestdist):
+                    closest = vIdx
+                    closestdist = dist
+            self.closestToCC.append(closest)
+            self.closestDist.append(closestdist)
+        self.closestToCC = np.array(self.closestToCC)
+        self.closestDist = np.array(self.closestDist)
 
         self.segmentType = [False for seg in self.segments]
         for triIdx in range(len(self.triangles)):
@@ -99,6 +125,13 @@ class Triangulation:
                     if self.voronoiEdges[triIdx, i] == self.outer:
                         self.segmentType[edgeId] = True
         self.segmentType = np.array(self.segmentType)
+
+        if axs is not None:
+            axs.clear()
+            axs.set_facecolor('lightgray')
+            self.plotTriangulation(axs)
+            plt.draw()
+            plt.pause(self.plotTime)
 
         self.ensureDelauney()
 
@@ -149,7 +182,7 @@ class Triangulation:
             tri = self.triangles[idx]
             for i in range(3):
                 edge = [tri[i], tri[(i + 1) % 3]]
-                segmentID = self.getSegmentIdx(edge)
+                segmentID = self.getSegmentIdx(np.array(edge))
                 if segmentID == self.noneEdge:
                     assert (self.constrainedMask[idx][(i + 2) % 3] == self.noneEdge)
                 else:
@@ -207,10 +240,16 @@ class Triangulation:
 
         # axs.scatter([p[0] for p in self.numericVerts],[p[1] for p in self.numericVerts],marker=".")
 
-        for tri in self.triangles:
+        for triIdx in range(len(self.triangles)):
+            tri = self.triangles[triIdx]
             cords = self.numericVerts[tri]
             cords = np.concatenate((cords, [cords[0]]))
-            axs.plot(*(cords.T), color='black', linewidth=1, zorder=98)
+            for i in range(3):
+                if (self.triangles[triIdx][(i + 1) % 3] >= self.instanceSize) and (
+                            self.triangles[triIdx][(i + 2) % 3] >= self.instanceSize) and  (self.edgeTopologyChanged[triIdx,i] or (self.voronoiEdges[triIdx,i] != self.outer and self.edgeTopologyChanged[self.voronoiEdges[triIdx,i],self.oppositeInternalIndex(triIdx,i)])):
+                    axs.plot(*(cords[[(i+1)%3,(i+2)%3]].T), color='black', linewidth=1, zorder=98, linestyle="dotted")
+                else:
+                    axs.plot(*(cords[[(i+1)%3,(i+2)%3]].T), color='black', linewidth=1, zorder=98)
             if eg.isBadTriangle(*self.exactVerts[tri]):
                 badCount += 1
                 t = plt.Polygon(self.numericVerts[tri], color='mediumorchid')
@@ -227,13 +266,13 @@ class Triangulation:
         for edgeId in range(len(self.segments)):
             e = self.segments[edgeId]
             t = self.segmentType[edgeId]
-            color = 'blue' if t else 'red'
+            color = 'indigo' if t else 'forestgreen'
             axs.plot(*(self.numericVerts[e].T), color=color, linewidth=2, zorder=99)
-        min = 5
-        max = 13
-        sizes = np.array(self.localTopologyChanged, dtype=int) * (max - min) + min
-        axs.scatter(*(self.numericVerts[:self.instanceSize].T), s=sizes[:self.instanceSize], color='black', zorder=100)
-        axs.scatter(*(self.numericVerts[self.instanceSize:].T), s=sizes[self.instanceSize:], color='green', zorder=100)
+        min = 12
+        max = 30
+        sizes = np.array(self.pointTopologyChanged, dtype=int) * (max - min) + min
+        axs.scatter(*(self.numericVerts[:self.instanceSize].T), s=min, color='black', zorder=100)
+        axs.scatter(*(self.numericVerts[self.instanceSize:].T), s=sizes[self.instanceSize:], color='red', zorder=100)
 
         axs.set_aspect('equal')
         axs.title.set_text(name)
@@ -243,14 +282,6 @@ class Triangulation:
     #####
     def point(self, i: int):
         return Point(*self.exactVerts[i])
-
-    def getSegmentIdx(self, querySeg):
-        revseg = [querySeg[1], querySeg[0]]
-        for i in range(len(self.segments)):
-            seg = self.segments[i]
-            if np.all(seg == querySeg) or np.all(seg == revseg):
-                return i
-        return self.noneEdge
 
     def isBad(self, triIdx):
         return eg.isBadTriangle(*self.exactVerts[self.triangles[triIdx]])
@@ -263,14 +294,35 @@ class Triangulation:
                 return i
         return self.noneIntervalVertex
 
+    def oppositeInternalIndexOfPoint(self, triIdx, vIdx):
+        for i in range(3):
+            if self.triangles[triIdx] == vIdx:
+                return self.oppositeInternalIndex(triIdx, i)
+        return self.noneIntervalVertex
+
     def oppositeInternalIndexOfEdge(self, triIdx, pIdx, qIdx):
         for i in range(3):
             if (self.triangles[triIdx][i] != pIdx) and (self.triangles[triIdx][i] != qIdx):
                 return i
         return self.noneIntervalVertex
 
+    def getSegmentIdx(self, querySeg):
+        locs = np.concatenate(
+            (np.argwhere(np.all((self.segments == querySeg), -1)),
+             np.argwhere(np.all((self.segments == querySeg[::-1]), -1))))
+        if len(locs) == 1:
+            return locs[0, 0]
+        else:
+            return self.noneEdge
+
     def trianglesOnEdge(self, pIdx, qIdx):
-        return [triIdx for triIdx in self.vertexMap[pIdx] if qIdx in self.triangles[triIdx]]
+        return np.array([triIdx for triIdx in self.vertexMap[pIdx] if qIdx in self.triangles[triIdx]])
+
+    def internalIndex(self, triIdx, vIdx):
+        for i in range(3):
+            if self.triangles[triIdx][i] == vIdx:
+                return i
+        return self.noneIntervalVertex
 
     #####
     # naive setters
@@ -279,14 +331,33 @@ class Triangulation:
         self.circumCenters[idx] = eg.circumcenter(*self.exactVerts[self.triangles[idx]])
         self.circumRadiiSqr[idx] = eg.distsq(self.point(self.triangles[idx][0]), self.circumCenters[idx])
 
+        closest = None
+        closestdist = None
+        for vIdx in range(len(self.exactVerts)):
+            dist = eg.distsq(self.circumCenters[idx], self.point(vIdx))
+            if (closest is None) or (dist < closestdist):
+                closest = vIdx
+                closestdist = dist
+        self.closestToCC[idx] = closest
+        self.closestDist[idx] = closestdist
+
     def unsetVertexMap(self, triIdx):
         for idx in self.triangles[triIdx]:
             self.vertexMap[idx].remove(triIdx)
 
+    def updateEdgeTopology(self,triIdx):
+        for otherIdx in self.voronoiEdges[triIdx]:
+            if otherIdx != self.outer and otherIdx != self.noneFace:
+                for i in range(3):
+                    self.edgeTopologyChanged[otherIdx,i] = True
+
     def setVertexMap(self, triIdx):
         for idx in self.triangles[triIdx]:
             self.vertexMap[idx].append(triIdx)
-            self.localTopologyChanged[idx] = True
+            self.pointTopologyChanged[idx] = True
+        for vIdx in self.triangles[triIdx]:
+            for otherIdx in self.vertexMap[vIdx]:
+                self.updateEdgeTopology(otherIdx)
 
     def unsetBadness(self, triIdx):
         if triIdx in self.badTris:
@@ -295,6 +366,9 @@ class Triangulation:
     def setBadness(self, triIdx):
         if self.isBad(triIdx):
             self.badTris = self.badTris + [triIdx]
+            dists = self.closestDist[self.badTris]
+            args = dists.argsort()
+            # self.badTris = list(np.array(self.badTris)[args[::-1]])
             if self.seed != None:
                 np.random.seed(self.seed)
                 np.random.shuffle(self.badTris)
@@ -307,17 +381,39 @@ class Triangulation:
         self.exactVerts = np.vstack((self.exactVerts, [p]))
         self.numericVerts = np.vstack((self.numericVerts, [float(p.x()), float(p.y())]))
         self.vertexMap.append([])
-        self.localTopologyChanged = np.hstack((self.localTopologyChanged, True))
+        self.pointTopologyChanged = np.hstack((self.pointTopologyChanged, True))
+
+        for triIdx in range(len(self.triangles)):
+            dist = eg.distsq(self.circumCenters[triIdx], p)
+            if (dist < self.closestDist[triIdx]):
+                self.closestToCC[triIdx] = len(self.exactVerts) - 1
+                self.closestDist[triIdx] = dist
 
     def _unsafeDeleteVertex(self, vIdx):
         self.exactVerts = np.delete(self.exactVerts, (vIdx), axis=0)
         self.numericVerts = np.delete(self.numericVerts, (vIdx), axis=0)
-        self.localTopologyChanged = np.delete(self.localTopologyChanged, (vIdx), axis=0)
+        self.pointTopologyChanged = np.delete(self.pointTopologyChanged, (vIdx), axis=0)
         self.vertexMap.pop(vIdx)
 
         # remap segments and triangles
         self.segments = np.where(self.segments > vIdx, self.segments - 1, self.segments)
         self.triangles = np.where(self.triangles > vIdx, self.triangles - 1, self.triangles)
+
+        updateDists = []
+        for triIdx in range(len(self.triangles)):
+            if self.closestToCC[triIdx] == vIdx:
+                updateDists.append(triIdx)
+
+        for triIdx in updateDists:
+            closest = None
+            closestdist = None
+            for vIdx in range(len(self.exactVerts)):
+                dist = eg.distsq(self.circumCenters[triIdx], self.point(vIdx))
+                if (closest is None) or (dist < closestdist):
+                    closest = vIdx
+                    closestdist = dist
+            self.closestToCC[triIdx] = closest
+            self.closestDist[triIdx] = closestdist
 
     def _unsafeUnlinkAndDeleteVertex(self, vIdx):
         assert (len(self.vertexMap[vIdx]) == 0)
@@ -353,6 +449,11 @@ class Triangulation:
             segIds = np.sort(segIds)
             self.segments[segIds[0]] = oldSeg
             self._unsafeDeleteSegment(segIds[1])
+            for triIdx in self.vertexMap[vIdx]:
+                for i in range(3):
+                    if self.triangles[triIdx, i] != vIdx and self.constrainedMask[triIdx, i] != self.noneEdge:
+                        self.voronoiEdges[triIdx, i] = self.noneFace
+                        self.constrainedMask[triIdx, i] = self.noneEdge
             return segIds[0]
         elif len(segIds) != 0:
             assert (False)
@@ -370,6 +471,34 @@ class Triangulation:
         for triIdx in self.vertexMap[vIdx]:
             self.setBadness(triIdx)
             self.setCircumCenter(triIdx)
+
+        # update all dists, that originally pointed to vIdx
+        updateDists = []
+        for triIdx in range(len(self.triangles)):
+            if self.closestToCC[triIdx] == vIdx:
+                updateDists.append(triIdx)
+
+        for triIdx in updateDists:
+            closest = None
+            closestdist = None
+            for vIdx in range(len(self.exactVerts)):
+                dist = eg.distsq(self.circumCenters[triIdx], self.point(vIdx))
+                if (closest is None) or (dist < closestdist):
+                    closest = vIdx
+                    closestdist = dist
+            self.closestToCC[triIdx] = closest
+            self.closestDist[triIdx] = closestdist
+
+        # update all other
+        for triIdx in range(len(self.triangles)):
+            dist = eg.distsq(self.circumCenters[triIdx], p)
+            if (dist < self.closestDist[triIdx]):
+                self.closestToCC[triIdx] = len(self.exactVerts) - 1
+                self.closestDist[triIdx] = dist
+
+
+        for otherIdx in self.vertexMap[vIdx]:
+            self.updateEdgeTopology(otherIdx)
 
     # segment
     def _unsafeDeleteSegment(self, segIdx):
@@ -408,16 +537,44 @@ class Triangulation:
             self.constrainedMask[idx] = np.where(self.voronoiEdges[idx] != sourceV, self.constrainedMask[idx], targetC)
             self.voronoiEdges[idx] = np.where(self.voronoiEdges[idx] != sourceV, self.voronoiEdges[idx], targetV)
 
+    def _unsafeCreateTriangles(self,tris,triVEdges,triMasks):
+        myIdxs = []
+        for i in range(len(tris)):
+            tri = tris[i]
+            triVEdge = triVEdges[i]
+            triMask = triMasks[i]
+
+            self.triangles = np.vstack((self.triangles, [tri]))
+            self.voronoiEdges = np.vstack((self.voronoiEdges, [triVEdge]))
+            self.constrainedMask = np.vstack((self.constrainedMask, [triMask]))
+            self.edgeTopologyChanged = np.vstack((self.edgeTopologyChanged, [True, True, True]))
+            self.closestToCC = np.hstack((self.closestToCC, [self.noneVertex]))
+            self.closestDist = np.hstack((self.closestDist, [FieldNumber(0)]))
+            self.circumCenters.append(Point(FieldNumber(0), FieldNumber(0)))
+            self.circumRadiiSqr.append(FieldNumber(0))
+
+            myIdxs.append(len(self.triangles) - 1)
+
+        for myIdx in myIdxs:
+
+            self.setVertexMap(myIdx)
+            self.setCircumCenter(myIdx)
+
+            self.setBadness(myIdx)
+
     def _unsafeCreateTriangle(self, tri, triVEdge, triMask):
         self.triangles = np.vstack((self.triangles, [tri]))
         self.voronoiEdges = np.vstack((self.voronoiEdges, [triVEdge]))
         self.constrainedMask = np.vstack((self.constrainedMask, [triMask]))
+        self.edgeTopologyChanged = np.vstack((self.edgeTopologyChanged, [True,True,True]))
+        self.closestToCC = np.hstack((self.closestToCC, [self.noneVertex]))
+        self.closestDist = np.hstack((self.closestDist, [FieldNumber(0)]))
+        self.circumCenters.append(Point(FieldNumber(0), FieldNumber(0)))
+        self.circumRadiiSqr.append(FieldNumber(0))
 
         myIdx = len(self.triangles) - 1
 
         self.setVertexMap(myIdx)
-        self.circumCenters.append(Point(FieldNumber(0), FieldNumber(0)))
-        self.circumRadiiSqr.append(FieldNumber(0))
         self.setCircumCenter(myIdx)
 
         self.setBadness(myIdx)
@@ -446,6 +603,9 @@ class Triangulation:
         self.triangles = np.delete(self.triangles, (triIdx), axis=0)
         self.constrainedMask = np.delete(self.constrainedMask, (triIdx), axis=0)
         self.voronoiEdges = np.delete(self.voronoiEdges, (triIdx), axis=0)
+        self.closestToCC = np.delete(self.closestToCC, (triIdx), axis=0)
+        self.closestDist = np.delete(self.closestDist, (triIdx), axis=0)
+        self.edgeTopologyChanged = np.delete(self.edgeTopologyChanged, (triIdx), axis=0)
         self.circumCenters.pop(triIdx)
         self.circumRadiiSqr.pop(triIdx)
 
@@ -496,7 +656,7 @@ class Triangulation:
         newMask = []
         for i in range(3):
             edge = [tri[(i + 1) % 3], tri[(i + 2) % 3]]
-            opp = self.trianglesOnEdge(*edge)
+            opp = self.trianglesOnEdge(edge[0], edge[1])
             if len(opp) == 1:
                 oppInd = self.oppositeInternalIndexOfEdge(opp[0], *edge)
                 assert (self.voronoiEdges[opp, oppInd] == self.noneFace)
@@ -504,7 +664,7 @@ class Triangulation:
                 newVEdge.append(opp[0])
                 newMask.append(self.constrainedMask[opp[0]][oppInd])
             elif len(opp) == 0:
-                if (edgeId := self.getSegmentIdx(edge)) == self.noneEdge:
+                if (edgeId := self.getSegmentIdx(np.array(edge))) == self.noneEdge:
                     newVEdge.append(self.noneFace)
                     newMask.append(self.noneEdge)
                 else:
@@ -541,7 +701,7 @@ class Triangulation:
                 newVEdge.append(opp[0])
                 newMask.append(self.constrainedMask[opp[0]][oppInd])
             elif len(opp) == 0:
-                if (edgeId := self.getSegmentIdx(edge)) == self.noneEdge:
+                if (edgeId := self.getSegmentIdx(np.array(edge))) == self.noneEdge:
                     newVEdge.append(self.noneFace)
                     newMask.append(self.noneEdge)
                 else:
@@ -624,7 +784,7 @@ class Triangulation:
             self._unsafeSetTriangle(triAIdx, newA, newAVedge, newAVedgeMask)
             self._unsafeSetTriangle(triBIdx, newB, newBVedge, newBVedgeMask)
 
-    def ensureDelauney(self):
+    def ensureDelauney(self,seedTris=None):
 
         def _isInHorribleEdgeStack(edgestack, edge):
             for e in edgestack:
@@ -666,7 +826,8 @@ class Triangulation:
                                     self.triangles[j][oppositeIndexInJ]]
                     newTriangleB = [self.triangles[i][jIdx], self.triangles[i][(jIdx + 2) % 3],
                                     self.triangles[j][oppositeIndexInJ]]
-                    if not eg.isBadTriangle(*self.exactVerts[newTriangleA]) and not eg.isBadTriangle(*self.exactVerts[newTriangleB]):
+                    if not eg.isBadTriangle(*self.exactVerts[newTriangleA]) and not eg.isBadTriangle(
+                            *self.exactVerts[newTriangleB]):
                         edge = [[i, jIdx], [j, oppositeIndexInJ]]
                         if (not _isInHorribleEdgeStack(badEdgesInTriangleLand, edge)) and (
                                 not _isNotBanned(bannedEdges, edge)):
@@ -678,9 +839,14 @@ class Triangulation:
         # they are stored as [triangleindex, inducing index]
         badEdgesInTriangleLand = []
         bannedEdges = []
-        for i in range(len(self.triangles)):
-            for jIdx in range(3):
-                _addEdgeToStack(i, jIdx)
+        if seedTris is None:
+            for i in range(len(self.triangles)):
+                for jIdx in range(3):
+                    _addEdgeToStack(i, jIdx)
+        else:
+            for i in seedTris:
+                for jIdx in range(3):
+                    _addEdgeToStack(i, jIdx)
 
         while len(badEdgesInTriangleLand) > 0:
             edge = badEdgesInTriangleLand[-1]
@@ -720,14 +886,16 @@ class Triangulation:
                 _addEdgeToStack(j, iIdx)
         self.validate()
 
-    def dropAltitude(self, idx):
+    def dropAltitude(self, idx, onlyInner=False):
         tri = self.triangles[idx]
         badIdx = eg.badAngle(*self.exactVerts[tri])
-        assert(badIdx != -1)
+        assert (badIdx != -1)
         if self.constrainedMask[idx][badIdx] == self.noneEdge:
             # print("nowhere to drop to!")
             return False
             # assert(False)
+        if onlyInner and self.voronoiEdges[idx][badIdx] == self.outer:
+            return False
         otherIdx = self.voronoiEdges[idx][badIdx]
 
         # first things first, split the segment
@@ -735,8 +903,46 @@ class Triangulation:
         segIdx = self.constrainedMask[idx][badIdx]
 
         # the point to be inserted on the segment
+        ap = None
+        #if self.voronoiEdges[idx][badIdx] == self.outer:
+        #    shorterIdx = (badIdx + 1) % 3
+        #    longerIdx = (badIdx + 2) % 3
+        #    if eg.distsq(self.point(tri[longerIdx]), self.point(tri[badIdx])) < eg.distsq(self.point(tri[shorterIdx]),
+        #                                                                                 self.point(tri[badIdx])):
+        #        shorterIdx = (badIdx + 2) % 3
+        #        longerIdx = (badIdx + 1) % 3
+        #    p = self.point(tri[badIdx])
+        #    orth = p - self.point(tri[shorterIdx])
+        #    orth = Point(FieldNumber(0)-orth.y(),orth.x())
+        #    if eg.dot(orth,self.point(tri[longerIdx]) - p) < FieldNumber(0):
+        #        orth = orth.scale(FieldNumber(-1))
+        #
+        #    inter = eg.supportingRayIntersectSegment(Segment(p,p+orth),Segment(self.point(tri[shorterIdx]),self.point(tri[longerIdx])))#
+        #
+        #    #dont drop past the middle point
+        #    if eg.distsq(self.point(tri[shorterIdx]),inter) < eg.distsq(self.point(tri[longerIdx]),inter):
+        #        ap = inter
+        #    else:
+        #        ap = eg.altitudePoint(Segment(self.point(segment[0]), self.point(segment[1])),
+        #                              self.exactVerts[tri[badIdx]])
+        #else:
         ap = eg.altitudePoint(Segment(self.point(segment[0]), self.point(segment[1])),
-                              self.exactVerts[tri[badIdx]])
+                                  self.exactVerts[tri[badIdx]])
+
+        self.tri.addPoint(ap)
+        for triIdx in range(len(self.tri.triangles)):
+            tri = self.tri.triangles[triIdx]
+            for i in range(3):
+                for j in range(1,3):
+                    neighbourInternal = (i+j)%3
+                    neighbourId,opp,_ = self.tri.triangleMap[triIdx,neighbourInternal]
+                    if neighbourId == np.iinfo(int).max:
+                        continue
+                    if j == 1:
+                        self.tri.getEnclosement([tri[(i+1)%3],tri[(i+2)%3],self.tri.triangles[neighbourId,opp]])
+                    if j == 2:
+                        self.tri.getEnclosement([self.tri.triangles[neighbourId,opp],tri[(i+1)%3],tri[(i+2)%3]])
+
 
         newPointIndex = len(self.exactVerts)
 
@@ -773,10 +979,10 @@ class Triangulation:
 
             self._unsafeRemapVoronoi(self.voronoiEdges[idx][(badIdx + 1) % 3], idx, newTriIndex)
 
-            self._unsafeSetTriangle(idx, newA, newAVedge, newAVedgeMask)
             self._unsafeCreateTriangle(newTri, newVedge, newVedgeMask)
+            self._unsafeSetTriangle(idx, newA, newAVedge, newAVedgeMask)
 
-            self.validate()
+            self.ensureDelauney([idx,newTriIndex])
 
         else:
             # phew fuck me...
@@ -820,11 +1026,11 @@ class Triangulation:
                 self._unsafeRemapVoronoi(self.voronoiEdges[idx][(badIdx + 1) % 3], idx, newInsideIdx)
                 self._unsafeRemapVoronoi(self.voronoiEdges[otherIdx][(opposingIdx + 1) % 3], otherIdx, newOutsideIdx)
 
-                self._unsafeSetTriangle(idx, newA, newAVedge, newAMask)
-                self._unsafeCreateTriangle(newInside, newInsideVedge, newInsideMask)
+                self._unsafeCreateTriangles([newInside, newOutside], [newInsideVedge, newOutsideVedge],
+                                            [newInsideMask, newOutsideMask])
 
+                self._unsafeSetTriangle(idx, newA, newAVedge, newAMask)
                 self._unsafeSetTriangle(otherIdx, newB, newBVedge, newBMask)
-                self._unsafeCreateTriangle(newOutside, newOutsideVedge, newOutsideMask)
 
             else:
                 newA = [tri[badIdx], tri[(badIdx + 1) % 3], newPointIndex]
@@ -849,13 +1055,15 @@ class Triangulation:
                 self._unsafeRemapVoronoi(self.voronoiEdges[idx][(badIdx + 1) % 3], idx, newInsideIdx)
                 self._unsafeRemapVoronoi(self.voronoiEdges[otherIdx][(opposingIdx + 2) % 3], otherIdx, newOutsideIdx)
 
+
+                self._unsafeCreateTriangles([newInside, newOutside], [newInsideVedge, newOutsideVedge],
+                                            [newInsideMask, newOutsideMask])
+                #self._unsafeCreateTriangle(newOutside, newOutsideVedge, newOutsideMask)
+                #self._unsafeCreateTriangle(newInside, newInsideVedge, newInsideMask)
+
                 self._unsafeSetTriangle(idx, newA, newAVedge, newAMask)
-                self._unsafeCreateTriangle(newInside, newInsideVedge, newInsideMask)
-
                 self._unsafeSetTriangle(otherIdx, newB, newBVedge, newBMask)
-                self._unsafeCreateTriangle(newOutside, newOutsideVedge, newOutsideMask)
-
-        self.ensureDelauney()
+            self.ensureDelauney([idx,otherIdx,newInsideIdx,newOutsideIdx])
         return True
 
     def addPoint(self, p: Point):
@@ -897,11 +1105,12 @@ class Triangulation:
         # make sure, its a copy!
         self._unsafeCreateVertex(Point(FieldNumber(p.x().exact()), FieldNumber(p.y().exact())))
 
+        self._unsafeCreateTriangles([newLeft,newRight],[newLeftVedge,newRightVedge],[newLeftMask,newRightMask])
+        #self._unsafeCreateTriangle(newLeft, newLeftVedge, newLeftMask)
+        #self._unsafeCreateTriangle(newRight, newRightVedge, newRightMask)
         self._unsafeSetTriangle(hitTriIdx, newA, newAVedge, newAMask)
-        self._unsafeCreateTriangle(newLeft, newLeftVedge, newLeftMask)
-        self._unsafeCreateTriangle(newRight, newRightVedge, newRightMask)
 
-        self.ensureDelauney()
+        self.ensureDelauney([hitTriIdx,newLeftTriIdx,newRightTriIdx])
 
         return True
 
@@ -996,6 +1205,8 @@ class Triangulation:
             for deleteIdx in [max(leftTriIdx, rightTriIdx), min(leftTriIdx, rightTriIdx)]:
                 self._unsafeDeleteTriangle(deleteIdx)
 
+            self.ensureDelauney(self.vertexMap[target])
+
             # remove source-vertex
             self._unsafeDeleteVertex(source)
 
@@ -1024,6 +1235,8 @@ class Triangulation:
 
             # remove triangles
             self._unsafeDeleteTriangle(leftTriIdx)
+
+            self.ensureDelauney(self.vertexMap[target])
 
             # remove source-vertex
             self._unsafeDeleteVertex(source)
@@ -1276,10 +1489,10 @@ class Triangulation:
                             link.append(i)
                 return link, constraint
 
-    def attemptComplicatedEdgeContraction(self, triIdx, vIdx, axs=None):
-        link, constraint = self.getLinkAroundEdge(triIdx, vIdx)
-        edge = [self.triangles[triIdx][(vIdx + 1) % 3], self.triangles[triIdx][(vIdx + 2) % 3]]
-
+    def _internalAttempt(self, link, constraint, edge, toFlip=[], axs=None):
+        for i in link:
+            if len([v for v in link if v == i])>1:
+                return False
         points = [self.point(i) for i in link]
 
         soltype = "None"
@@ -1291,6 +1504,16 @@ class Triangulation:
 
         if soltype == "None":
             return False
+
+        for flip in toFlip:
+            self.flipTrianglePair(flip[0], flip[1])
+
+            if axs is not None:
+                axs.clear()
+                self.plotTriangulation(axs)
+                plt.draw()
+                plt.pause(self.plotTime)
+
         if soltype == "inside":
             idx = 0
 
@@ -1325,7 +1548,7 @@ class Triangulation:
                     axs.clear()
                     self.plotTriangulation(axs)
                     plt.draw()
-                    plt.pause(0.001)
+                    plt.pause(self.plotTime)
 
             addorFacePool = []
 
@@ -1356,7 +1579,6 @@ class Triangulation:
                         # is NOT constraint to edge[idx] but rather on the boundary of the link
                         addorFacePool.append([edge[idx], self.segments[edgeId][0], self.segments[edgeId][1]])
 
-
             # next move the unshackled point. this should now lie in the center of the star
             self._unsafeMoveVertex(edge[idx], cs[0])
 
@@ -1364,7 +1586,7 @@ class Triangulation:
                 axs.clear()
                 self.plotTriangulation(axs)
                 plt.draw()
-                plt.pause(0.001)
+                plt.pause(self.plotTime)
 
             # now reintroduce the faces. careful tho, there might be two, that have edge[idx] twice. collect these two, and merge them
             # len(collector) should always dominate
@@ -1385,11 +1607,13 @@ class Triangulation:
                         axs.clear()
                         self.plotTriangulation(axs)
                         plt.draw()
-                        plt.pause(0.001)
+                        plt.pause(self.plotTime)
 
             assert (len(collector) >= len(addorFacePool))
             for it in range(len(addorFacePool)):
                 self._unsafeLinkAndSetTriangle(faceIdPool[collector[it]], addorFacePool[it])
+
+            self.ensureDelauney(self.vertexMap[edge[idx]])
 
             for id in reversed(sorted(np.array(faceIdPool)[collector[len(addorFacePool):]])):
                 self._superUnsafeDeleteTriangle(id)
@@ -1399,10 +1623,10 @@ class Triangulation:
                 axs.clear()
                 self.plotTriangulation(axs)
                 plt.draw()
-                plt.pause(0.001)
+                plt.pause(self.plotTime)
             return True
         else:
-            #print("=",end="")
+            # print("=",end="")
             # this is now easy.
             # unlink all neighbouring triangles, and relink them to the solving vertex. delete all others
 
@@ -1420,7 +1644,7 @@ class Triangulation:
                     axs.clear()
                     self.plotTriangulation(axs)
                     plt.draw()
-                    plt.pause(0.001)
+                    plt.pause(self.plotTime)
 
             idx = 1
             otherIdx = 0
@@ -1436,49 +1660,111 @@ class Triangulation:
                     axs.clear()
                     self.plotTriangulation(axs)
                     plt.draw()
-                    plt.pause(0.001)
+                    plt.pause(self.plotTime)
 
             self._unsafeUnlinkVertex(edge[0])
             self._unsafeUnlinkVertex(edge[1])
 
             digest = 0
+            movedIndexList = []
             for it in range(len(link)):
-                triPoints = [self.point(link[cs]),self.point(link[it]),self.point(link[(it+1)%len(link)])]
-                if not eg.colinear(Segment(triPoints[0],triPoints[1]),triPoints[2]):
-                    self._unsafeLinkAndSetTriangle(faceIdPool[digest],[link[cs],link[it],link[(it+1)%len(link)]])
+                triPoints = [self.point(link[cs]), self.point(link[it]), self.point(link[(it + 1) % len(link)])]
+                if not eg.colinear(Segment(triPoints[0], triPoints[1]), triPoints[2]):
+                    self._unsafeLinkAndSetTriangle(faceIdPool[digest], [link[cs], link[it], link[(it + 1) % len(link)]])
+                    movedIndexList.append(faceIdPool[digest])
                     digest += 1
                     if axs is not None:
                         axs.clear()
                         self.plotTriangulation(axs)
                         plt.draw()
-                        plt.pause(0.001)
+                        plt.pause(self.plotTime)
+
+            self.ensureDelauney(movedIndexList)
 
             for id in reversed(sorted(np.array(faceIdPool)[digest:])):
                 self._superUnsafeDeleteTriangle(id)
-            self._unsafeDeleteVertex(max(edge[0],edge[1]))
-            self._unsafeDeleteVertex(min(edge[0],edge[1]))
+            self._unsafeDeleteVertex(max(edge[0], edge[1]))
+            self._unsafeDeleteVertex(min(edge[0], edge[1]))
 
             if axs is not None:
                 axs.clear()
                 self.plotTriangulation(axs)
                 plt.draw()
-                plt.pause(0.001)
+                plt.pause(self.plotTime)
 
             return True
+
+    def attemptComplicatedEdgeContraction(self, triIdx, vIdx, axs=None, withFaceExpansion=False):
+        neither = True
+        if self.edgeTopologyChanged[triIdx,vIdx]:
+            neither = False
+            self.edgeTopologyChanged[triIdx, vIdx] = False
+        oppVIdx = self.oppositeInternalIndex(triIdx,vIdx)
+        oppTriIdx = self.voronoiEdges[triIdx,vIdx]
+        if oppTriIdx != self.outer and self.edgeTopologyChanged[oppTriIdx,oppVIdx]:
+            neither = False
+            self.edgeTopologyChanged[oppTriIdx, oppVIdx] = False
+
+        if neither:
+            return False
+        link, constraint = self.getLinkAroundEdge(triIdx, vIdx)
+        if len(constraint) > 2:
+            return False
+        edge = [self.triangles[triIdx][(vIdx + 1) % 3], self.triangles[triIdx][(vIdx + 2) % 3]]
+        expanders = [None]
+        if withFaceExpansion:
+            for s in edge:
+                for triIdx in self.vertexMap[s]:
+                    iSId = self.internalIndex(triIdx, s)
+                    if self.voronoiEdges[triIdx][iSId] != self.outer and self.constrainedMask[triIdx][
+                        iSId] == self.noneEdge:
+                        oppV = self.triangles[self.voronoiEdges[triIdx][iSId]][self.oppositeInternalIndex(triIdx, iSId)]
+                        if oppV not in link:
+                            expanders.append(
+                                [self.triangles[triIdx][(iSId + 1) % 3], self.triangles[triIdx][(iSId + 2) % 3], oppV,
+                                 triIdx, self.voronoiEdges[triIdx][iSId]])
+        for expander in expanders:
+            if expander == None:
+                if self._internalAttempt(link, constraint, edge, axs=axs):
+                    return True
+            else:
+                l = expander[0]
+                r = expander[1]
+                ex = expander[2]
+                toFlip = [expander[3:]]
+
+                tempLink = link.copy()
+                tempConstraint = []
+
+                for i in range(len(link)):
+                    if (link[i] == l and link[(i + 1) % len(link)] == r) or (
+                            link[i] == r and link[(i + 1) % len(link)] == l):
+                        tempLink = tempLink[:(i + 1)] + [ex] + tempLink[(i + 1):]
+                        for c in constraint:
+                            if c > i:
+                                tempConstraint.append(c + 1)
+                            else:
+                                tempConstraint.append(c)
+                        break
+                if self._internalAttempt(tempLink, tempConstraint, edge, toFlip, axs):
+                    return True
+        return False
 
     def moveSteinerpoint(self, ignoreBadness=False, mainAx=None):
         globalMoved = False
         badMap = [[] for v in self.exactVerts]
+
+        movedIndexList = []
 
         for triIdx in self.badTris:
             for vIdx in self.triangles[triIdx]:
                 badMap[vIdx].append(triIdx)
 
         for idx in range(self.instanceSize, len(self.exactVerts)):
-            if self.localTopologyChanged[idx] == False:
+            if self.pointTopologyChanged[idx] == False:
                 continue
 
-            self.localTopologyChanged[idx] = True
+            self.pointTopologyChanged[idx] = False
             # attempt to move the steinerpoint with index idx
             moved = False
             onlyVertex = True
@@ -1527,7 +1813,7 @@ class Triangulation:
                     if moved:
                         for i in link:
                             assert (i != self.outer)
-                            self.localTopologyChanged[i] = True
+                            self.pointTopologyChanged[i] = True
                     # validate point
                     onlyLeft = True
                     onlyRight = True
@@ -1543,38 +1829,31 @@ class Triangulation:
                             onlyLeft = False
                     if (onlyLeft == False) and (onlyRight == False):
                         pass
-                        #print("oh no...")
+                        # print("oh no...")
 
-                    self.exactVerts[idx] = Point(FieldNumber(cs[0].x().exact()), FieldNumber(cs[0].y().exact()))
-                    self.numericVerts[idx] = [float(cs[0].x()), float(cs[0].y())]
+                    self._unsafeMoveVertex(idx,cs[0])
+                    #self.exactVerts[idx] = Point(FieldNumber(cs[0].x().exact()), FieldNumber(cs[0].y().exact()))
+                    #self.numericVerts[idx] = [float(cs[0].x()), float(cs[0].y())]
+                    #for triIndex in enclosedTriangles:
+                    #    self.setCircumCenter(triIndex)
+                    #    self.unsetBadness(triIndex)
+                    self.pointTopologyChanged[idx] = False
                     for triIndex in enclosedTriangles:
-                        self.setCircumCenter(triIndex)
-                        self.unsetBadness(triIndex)
-                    self.validate()
+                        movedIndexList.append(triIndex)
+                    self.ensureDelauney(movedIndexList)
+                    return True
                 elif solType == "vertex":
                     # identiy the two triangles that can die
                     # if onBoundary:
                     # print("special case")
                     for i in link:
-                        assert (i != "dummy")
-                        self.localTopologyChanged[i] = True
+                        self.pointTopologyChanged[i] = True
                     self.mergePoints(idx, link[cs])
-                    self.validate()
-                    # self.validate()
-                    moved = True
-                    globalMoved = True
-                    break
+                    return True
                 elif solType == "None":
                     pass
                     # print("has no center")
-            if moved:
-                globalMoved = True
-            else:
-                self.localTopologyChanged[idx] = False
-        if globalMoved:
-            # self.validate()
-            self.ensureDelauney()
-        return globalMoved
+        return False
 
     def improveQuality(self, axs=None, verbosity=0):
         drawTime = 0
@@ -1583,46 +1862,66 @@ class Triangulation:
         droppingTime = 0
         addingTime = 0
         finalWiggle = False
+
+        expectedSolutionSize = len(self.badTris)
+
         for round in range(5000):
 
             start = time.time()
             # plot solution
-            if axs is not None and (round % 10) == 0:
+            if axs is not None and (finalWiggle or (round % 5) == 0):
                 axs.clear()
                 axs.set_facecolor('lightgray')
                 self.plotTriangulation(axs)
                 plt.draw()
-                plt.pause(0.001)
+                plt.pause(self.plotTime)
             drawTime += time.time() - start
 
             start = time.time()
             removed = False
             vprint("removing...", end="", verbosity=verbosity)
             # new rule: try to contract edge
-            for triIdx in range(len(self.triangles)):
-                for vIdx in range(3):
-                    if (self.triangles[triIdx][(vIdx + 1) % 3] >= self.instanceSize) and (
-                            self.triangles[triIdx][(vIdx + 2) % 3] >= self.instanceSize) and (
-                            triIdx < self.voronoiEdges[triIdx][vIdx]) and (
-                            (self.localTopologyChanged[self.triangles[triIdx][(vIdx + 1) % 3]]) or (
-                            self.localTopologyChanged[self.triangles[triIdx][(vIdx + 2) % 3]])):
-                        if self.attemptComplicatedEdgeContraction(triIdx, vIdx):
-                            #print("-", end="")
-                            self.ensureDelauney()
-                            removed = True
-                            break
+            for triIdx,vIdx in np.argwhere(self.edgeTopologyChanged == True):
+                if (self.triangles[triIdx][(vIdx + 1) % 3] >= self.instanceSize) and (
+                        self.triangles[triIdx][(vIdx + 2) % 3] >= self.instanceSize):
+                    if self.attemptComplicatedEdgeContraction(triIdx, vIdx, None, finalWiggle):
+                        # print("-", end="")
+                        removed = True
+                        break
                 if removed:
                     break
-            removalTime += time.time() - start
             if removed:
+                removalTime += time.time() - start
                 vprint("success", verbosity=verbosity)
                 continue
-            vprint("failure", verbosity=verbosity)
+
+            # try greedily more faces, but still only edges
+
+            # if (len(self.exactVerts)-self.instanceSize) * 3 > expectedSolutionSize:
+            #    for triIdx in range(len(self.triangles)):
+            #        for vIdx in range(3):
+            #            if (self.triangles[triIdx][(vIdx + 1) % 3] >= self.instanceSize) and (
+            #                    self.triangles[triIdx][(vIdx + 2) % 3] >= self.instanceSize) and (
+            #                    triIdx < self.voronoiEdges[triIdx][vIdx]) and (
+            #                    (self.pointTopologyChanged[self.triangles[triIdx][(vIdx + 1) % 3]]) or (
+            #                    self.pointTopologyChanged[self.triangles[triIdx][(vIdx + 2) % 3]])):
+            #                if self.attemptComplicatedEdgeContraction(triIdx, vIdx,None,True):
+            #                    #print("-", end="")
+            #                    self.ensureDelauney()
+            #                    removed = True
+            #                    break
+            #        if removed:
+            #            break
+            #    removalTime += time.time() - start
+            #    if removed:
+            #        vprint("success", verbosity=verbosity)
+            #        continue
+            #    vprint("failure", verbosity=verbosity)
 
             # attempt moving every vertex to locally remove bad triangles
             start = time.time()
             vprint("moving...", end="", verbosity=verbosity)
-            movedSomething = self.moveSteinerpoint(ignoreBadness=True, mainAx=axs)
+            movedSomething = self.moveSteinerpoint(ignoreBadness=finalWiggle, mainAx=axs)
             movingTime += time.time() - start
             vprint("success" if movedSomething else "failure", verbosity=verbosity)
 
@@ -1633,11 +1932,17 @@ class Triangulation:
             # attempt to drop an altitude onto a constraint
             start = time.time()
             added = False
-            vprint("dropping...", end="", verbosity=verbosity)
-            for triIdx in self.badTris:
-                if self.dropAltitude(triIdx):
-                    added = True
-                    break
+            # vprint("dropping...", end="", verbosity=verbosity)
+            # for triIdx in self.badTris:
+            #    if self.dropAltitude(triIdx,onlyInner = True):
+            #        added = True
+            #        break
+            # attempt to drop onto outer face
+            if not added:
+                for triIdx in self.badTris:
+                    if self.dropAltitude(triIdx, onlyInner=False):
+                        added = True
+                        break
             vprint("success" if added else "failure", verbosity=verbosity)
             droppingTime += time.time() - start
 
@@ -1652,7 +1957,8 @@ class Triangulation:
                     # if this is the first time we have found a solution, attempt to move every point again, potentially
                     # removing steinerpoints (via starting the next round)
                     finalWiggle = True
-                    self.localTopologyChanged = [True for v in self.exactVerts]
+                    self.pointTopologyChanged = [True for v in self.exactVerts]
+                    self.edgeTopologyChanged = np.full(self.triangles.shape,True)
                     continue
                 else:
 
@@ -1661,38 +1967,66 @@ class Triangulation:
                         axs.clear()
                         self.plotTriangulation(axs)
                         plt.draw()
-                        plt.pause(0.001)
-                    #print(f"\ndraw: {drawTime:0,.2f}; remove: {removalTime:0,.2f}; move: {movingTime:0,.2f}; drop: {droppingTime:0,.2f}; add: {addingTime:0,.2f};       ",end="")
+                        plt.pause(1)
+                    # print(f"\ndraw: {drawTime:0,.2f}; remove: {removalTime:0,.2f}; move: {movingTime:0,.2f}; drop: {droppingTime:0,.2f}; add: {addingTime:0,.2f};       ",end="")
                     return self.solutionParse()
             start = time.time()
 
+            start = time.time()
+            added = False
             withRounding = True
             if withRounding:
                 # if we end up here, we attempt fixing a bad triangle by adding its circumcenter as a steiner point
                 for triIdx in self.badTris:
+                    # this shouldnt be here, but whatever
+                    # badIdx = eg.badAngle(self.point(self.triangles[triIdx][0]),self.point(self.triangles[triIdx][1]),self.point(self.triangles[triIdx][2]))
+                    # badPoint = self.point(self.triangles[triIdx][badIdx])
+                    # dropsThrough = False
+                    # for segIdx in range(len(self.segments)):
+                    #    seg = self.segments[segIdx]
+                    #    if eg.innerIntersect(self.point(seg[0]), self.point(seg[1]), badPoint, self.circumCenters[triIdx]) is not None:
+                    #        dropsThrough = True
+                    # if dropsThrough:
+                    #    continue
                     vprint("adding rounded circumcenter of " + str(triIdx) + "...", end="", verbosity=verbosity)
                     added = self.addPoint(eg.roundExact(self.circumCenters[triIdx]))
                     if added:
                         if verbosity > 0:
-                            vprint("success",verbosity=verbosity)
+                            vprint("success", verbosity=verbosity)
                         break
                     if not added and verbosity > 0:
-                        vprint("failure",verbosity=verbosity)
+                        vprint("failure", verbosity=verbosity)
             if added:
                 addingTime += time.time() - start
                 continue
             # if rounding didnt work, try to add an exact version
             for triIdx in self.badTris:
+                # this shouldnt be here, but whatever
+                # badIdx = eg.badAngle(self.point(self.triangles[triIdx][0]), self.point(self.triangles[triIdx][1]),
+                #                     self.point(self.triangles[triIdx][2]))
+                # badPoint = self.point(self.triangles[triIdx][badIdx])
+                # dropsThrough = False
+                # for segIdx in range(len(self.segments)):
+                #    seg = self.segments[segIdx]
+                #    if eg.innerIntersect(self.point(seg[0]), self.point(seg[1]), badPoint,
+                #                         self.circumCenters[triIdx]) is not None:
+                #        dropsThrough = True
+                # if dropsThrough:
+                #    continue
                 vprint("adding exact circumcenter of " + str(triIdx) + " with representation length " + str(
                     len(str(self.circumCenters[triIdx].x().exact())) + len(
                         str(self.circumCenters[triIdx].y().exact()))) + "...", end="", verbosity=verbosity)
                 added = self.addPoint(self.circumCenters[triIdx])
                 if added:
                     if verbosity > 0:
-                        vprint("success",verbosity=verbosity)
+                        vprint("success", verbosity=verbosity)
                     break
                 if not added and verbosity > 0:
                     vprint("failure", verbosity=verbosity)
+
+            addingTime += time.time() - start
+            if added:
+                continue
 
             # if we end up here, all circumcenter of bad triangles lie outside the bounding polygon, or on
             # an edge of the triangulation. In this case we simply add a point in the middle of the triangle. this will
@@ -1714,6 +2048,6 @@ class Triangulation:
             if not added:
                 pass
                 # if we end up here, we are fucked
-                #print("huh")
+                # print("huh")
             addingTime += time.time() - start
         return None

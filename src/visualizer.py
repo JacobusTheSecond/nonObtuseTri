@@ -1,4 +1,8 @@
+import os
+
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("TkAgg")
 import numpy as np
 from pathlib import Path
 from cgshop2025_pyutils import InstanceDatabase,ZipSolutionIterator,verify
@@ -116,9 +120,10 @@ def compareSolutions(base,others):
         diff.append(len(a.steiner_points_x) - len(other[idx].steiner_points_x))
         #baseName.append(bases[baseIdx])
         #name.append(others[idx])
-        fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx].name,base[baseIdx].name])
+        fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx].name,base[baseIdx].name,idb[a.instance_uid].num_points])
 
-    fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
+    #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
+    #fullList = sorted(fullList,key = lambda entry : entry[4])
     zippedList = [e[0] for e in fullList]
     diff = [e[1] for e in fullList]
     name = [e[2] for e in fullList]
@@ -181,7 +186,17 @@ if __name__=="__main__":
     numeric_solutions = filepath.parent.parent/"instance_solutions" / "numeric_solutions"
     exact_solutions = filepath.parent.parent/"instance_solutions" / "exact_solutions"
     new = filepath.parent.parent/"instance_solutions" / "newestVersion"
+    seeded = filepath.parent.parent/"instance_solutions" / "seededRuns"
+    seededEndFace = filepath.parent.parent/"instance_solutions"/"seededWithFECleaning"
+    seededFace = filepath.parent.parent/"instance_solutions"/"seededWithFaceExpansion"
+    withFace = filepath.parent.parent/"instance_solutions"/"withFaceExpansion"
+    out = filepath.parent.parent/"instance_solutions"/"out"
+    output = filepath.parent.parent/"instance_solutions"/"output"
 
-    extractionnames = ["properEdgeContractPrepend.zip","properEdgeContract.zip"]
+    allexceptnumeric = []
+    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,out]:
+        allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
-    compareSolutions(base=[v for v in numeric_solutions.iterdir()]+[v for v in exact_solutions.iterdir() ],others=[v for v in new.iterdir()])
+    #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
+    compareSolutions(base=[v for v in output.iterdir()],others=allexceptnumeric)
+    #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
