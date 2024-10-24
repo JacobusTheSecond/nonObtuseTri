@@ -12,15 +12,7 @@ pip install --verbose git+https://github.com/CG-SHOP/pyutils25
 ```
 ### Execution
 Run `python src/visualizer.py`.
-By default it will compare the solution `challenge_instances_cgshop25/zips/solutions.zip` to the best solution out of
-- `challenge_instances_cgshop25/zips/cornerLimit10Drop.zip`
-- `challenge_instances_cgshop25/zips/cornerLimit10DropRefine.zip`
-- `challenge_instances_cgshop25/zips/cornerLimitDrop.zip`
-- `challenge_instances_cgshop25/zips/cornerRule.zip`
-- `challenge_instances_cgshop25/zips/cornerRuleLimit.zip`
-- `challenge_instances_cgshop25/zips/cornerDynLimitDropRefine.zip`
-- `challenge_instances_cgshop25/zips/cornerLimit20DropRefine.zip`
-- `challenge_instances_cgshop25/zips/cornerNoLimitDropRefine.zip`
+By default it will compare the best solutions in `instance_solutions/exact_solutions` and `instance_solutions/numeric_solutions` to the best solutions in `instance_solutions/newestVersion`
 
 ### The GUI
 The GUI consists of three parts:
