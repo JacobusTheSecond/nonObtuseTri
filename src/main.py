@@ -7,6 +7,8 @@ import logging
 import threading
 import time
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("TkAgg")
 from pathlib import Path
 
 import numpy as np
@@ -15,9 +17,9 @@ exact = True
 if exact:
     from exactTriangulation import Triangulation
 
-    def improveQuality(instance: Cgshop2025Instance, withShow=True, axs=None, verbosity=0):
+    def improveQuality(instance: Cgshop2025Instance, withShow=True, axs=None, verbosity=0,seed=None):
         # print("WORK IN PROGRESS. PROCEED WITH CARE.")
-        triangulation = Triangulation(instance, withValidate=False)
+        triangulation = Triangulation(instance, withValidate=False,seed=seed,axs=axs)
         l = len(triangulation.triangles)
         if (withShow):
             plt.ion()
@@ -25,7 +27,7 @@ if exact:
 else:
     from QualityImprover import improveQuality
 
-def verifyAll(solname="cur_solutions.zip"):
+def verifyAll(solname="cur_solution.zip"):
 
     filepath = Path(__file__)
     solLoc = filepath.parent.parent/"instance_solutions"
@@ -47,9 +49,10 @@ def solveEveryInstance(solname="cur_solution.zip"):
     solutions = []
     i = 0
     axs = None
-    debugIdx = None#88
-    debugUID = None#"point-set_10_13860916"
-    withShow = True#(debugIdx != None) or (debugUID != None)
+    debugSeed = None#267012647
+    debugIdx = None#7#8#88
+    debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
+    withShow = True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         fig, axs = plt.subplots(1, 1)
         fig.patch.set_facecolor('lightgray')
@@ -61,12 +64,13 @@ def solveEveryInstance(solname="cur_solution.zip"):
             continue
         start = time.time()
         #try:
-        #print(i,":",instance.instance_uid,":...",end='')
+        print(i,":",instance.instance_uid,":...",end='')
         verbosity = 0 if (debugIdx is None) else 1
-        solution = improveQuality(instance, withShow=withShow, axs=axs, verbosity=verbosity)
+        solution = improveQuality(instance, withShow=withShow, axs=axs, seed=debugSeed, verbosity=verbosity)
+        solutions.append(solution)
             #print("Fuck instance", instance.instance_uid, end='')
         end = time.time()
-        #print("#Steiner:",len(solution.steiner_points_x),f"Elapsed time: {end-start:0,.2f}")
+        print("#Steiner:",len(solution.steiner_points_x),f"Elapsed time: {end-start:0,.2f}")
         #except:
         #    print("Some error occured")
 
@@ -127,7 +131,7 @@ def init_pool_processes(the_lock,the_returner,the_seeds):
 
 def seeded_Multi():
     numThreads = 8
-    total = 64
+    total = 8
     filepath = Path(__file__)
     idb = InstanceDatabase(
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
@@ -135,6 +139,8 @@ def seeded_Multi():
     returner = manager.list([manager.list() for i in range(total)])
     np.random.seed(0)
     seeds = [np.random.randint(0,1000000000) for i in range(total)]
+    print(seeds)
+    #print(seeds[22])
     lock = manager.Lock()
     with Pool(processes=numThreads,initializer=init_pool_processes,initargs=(lock,returner,seeds)) as pool:
         result = pool.map_async(workerFunction,range(total),chunksize=1)
@@ -142,7 +148,7 @@ def seeded_Multi():
         result.wait()
         allSolutions = [[sol for sol in sols] for sols in returner]
 
-        solLoc = filepath.parent.parent / "instance_solutions" / "seededRuns"
+        solLoc = filepath.parent.parent / "instance_solutions" / "out"
 
         for i in range(len(allSolutions)):
             solname = "seed"+str(seeds[i])+".zip"
