@@ -7,14 +7,15 @@ from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 from exact_geometry import circumcenter
 
 plot_counter = 0
-exactXs = []#['1885901035659067045/17428496250830848', '187', '208', '198593701368361595683/944229799608451072', '226', '1132576691202293755/8714248125415424']
-exactYs = []#['835550492288332099259/278855940013293568', '3011', '3021', '5817900572796388795173/1888459599216902144', '3484', '430935302576235609765/139427970006646784']
+points = [(378, 709), (472, 394), (433, 575)]
+exactXs = [p[0] for p in points]#['1885901035659067045/17428496250830848', '187', '208', '198593701368361595683/944229799608451072', '226', '1132576691202293755/8714248125415424']
+exactYs = [p[1] for p in points]#['835550492288332099259/278855940013293568', '3011', '3021', '5817900572796388795173/1888459599216902144', '3484', '430935302576235609765/139427970006646784']
 exactPoints = [Point(FieldNumber(exactXs[i]),FieldNumber(exactYs[i])) for i in range(len(exactYs))]
 xs = [float(p.x()) for p in exactPoints]#[3,7,8.5,7,3,1.5]
 ys = [float(p.y()) for p in exactPoints]#[1,1,3.5,6,6,3.5]
 constrainted = True
 coA = 0
-coB = 1
+coB = 2
 #exactPoints = [Point(FieldNumber(xs[i]),FieldNumber(ys[i])) for i in range(len(xs))]
 
 from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
@@ -657,14 +658,16 @@ def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num
                     # if this is 0, then its colinear and addor will be the next point along the boundary, which is NOT inside
                     if Segment(mid, m).squared_length() != 0:
                         diff = p - mid
-                        addors.append(mid - diff)
+                        if distsq(p,mid - diff) <= distsq(p,p+o):
+                            addors.append(mid - diff)
         elif inCirc == "outside":
             mid = altitudePoint(Segment(p, p + o), m)
             secondInCirc = inCircle(m, rsqr, mid)
             if secondInCirc == "on":
                 # if we are tangent, we have to check that we are not inserting a vertex
                 if not ((mid == points[j]) or (mid == points[(j + 1) % numpoints])):
-                    addors.append(mid)
+                    if distsq(p,mid) <= distsq(p,p+o):
+                        addors.append(mid)
             elif secondInCirc == "inside":
                 ex, addor1 = binaryIntersection(m, rsqr, Segment(p, mid))
                 diff = addor1 - mid
@@ -791,7 +794,7 @@ def primitiveTester():
         axs.clear()
         axs.scatter(xs,ys,color="blue",zorder=10000000)
 
-        if len(xs)>=4:
+        if len(xs)>=3:
             for i in range(len(xs)):
                 axs.plot([xs[i],xs[(i+1)%len(xs)]],[ys[i],ys[(i+1)%len(xs)]])
 
@@ -878,7 +881,7 @@ def primitiveTester():
         if event.key == '-':
             num = max(num-1,0)
 
-        if len(xs) >= 4:
+        if len(xs) >= 3:
             for i in range(len(xs)):
                 axs.plot([xs[i], xs[(i + 1) % len(xs)]], [ys[i], ys[(i + 1) % len(xs)]])
 
@@ -938,7 +941,7 @@ def primitiveTester():
     axs.clear()
     axs.scatter(xs,ys,color="blue",zorder=10000000)
 
-    if len(xs) >= 4:
+    if len(xs) >= 3:
         for i in range(len(xs)):
             axs.plot([xs[i], xs[(i + 1) % len(xs)]], [ys[i], ys[(i + 1) % len(xs)]])
 
