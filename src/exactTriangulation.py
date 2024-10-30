@@ -929,19 +929,22 @@ class Triangulation:
         ap = eg.altitudePoint(Segment(self.point(segment[0]), self.point(segment[1])),
                                   self.exactVerts[tri[badIdx]])
 
-        self.tri.addPoint(ap)
-        for triIdx in range(len(self.tri.triangles)):
-            tri = self.tri.triangles[triIdx]
-            for i in range(3):
-                for j in range(1,3):
-                    neighbourInternal = (i+j)%3
-                    neighbourId,opp,_ = self.tri.triangleMap[triIdx,neighbourInternal]
-                    if neighbourId == np.iinfo(int).max:
-                        continue
-                    if j == 1:
-                        self.tri.getEnclosement([tri[(i+1)%3],tri[(i+2)%3],self.tri.triangles[neighbourId,opp]])
-                    if j == 2:
-                        self.tri.getEnclosement([self.tri.triangles[neighbourId,opp],tri[(i+1)%3],tri[(i+2)%3]])
+        ap2 = eg.altitudePoint(Segment(self.point(segment[0]), self.point(segment[1])),
+                                  self.exactVerts[tri[badIdx]])
+
+        self.tri.addPoint(ap2)
+        #for triIdx in range(len(self.tri.triangles)):
+        #    tri = self.tri.triangles[triIdx]
+        #    for i in range(3):
+        #        for j in range(1,3):
+        #            neighbourInternal = (i+j)%3
+        #            neighbourId,opp,_ = self.tri.triangleMap[triIdx,neighbourInternal]
+        #            if neighbourId == np.iinfo(int).max:
+        #                continue
+        #            if j == 1:
+        #                self.tri.getEnclosementOfLink([tri[(i+1)%3],tri[(i+2)%3],self.tri.triangles[neighbourId,opp]])
+        #            if j == 2:
+        #                self.tri.getEnclosementOfLink([self.tri.triangles[neighbourId,opp],tri[(i+1)%3],tri[(i+2)%3]])
 
 
         newPointIndex = len(self.exactVerts)

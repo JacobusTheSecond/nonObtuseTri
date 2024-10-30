@@ -644,21 +644,23 @@ def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num
             if inCircle(m, rsqr, p + o) != "on":
                 # if m is in direction of o, there should be a second one
                 dotomp = dot(o, m - p)
-                if dotomp > zero:
+                if dotomp > FieldNumber(0):
                     # there is a second one
                     mid = altitudePoint(Segment(p, p + o), m)
 
                     # if this is 0, then its colinear and addor will be the next point along the boundary, which is NOT inside
                     if Segment(mid, m).squared_length() != 0:
                         diff = p - mid
-                        addors.append(mid - diff)
+                        if distsq(p,mid - diff) <= distsq(p,p+o):
+                            addors.append(mid - diff)
         elif inCirc == "outside":
             mid = altitudePoint(Segment(p, p + o), m)
             secondInCirc = inCircle(m, rsqr, mid)
             if secondInCirc == "on":
                 # if we are tangent, we have to check that we are not inserting a vertex
                 if not ((mid == points[j]) or (mid == points[(j + 1) % numpoints])):
-                    addors.append(mid)
+                    if distsq(p,mid) <= distsq(p,p+o):
+                        addors.append(mid)
             elif secondInCirc == "inside":
                 ex, addor1 = binaryIntersection(m, rsqr, Segment(p, mid))
                 diff = addor1 - mid

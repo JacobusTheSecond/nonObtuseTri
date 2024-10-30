@@ -122,7 +122,7 @@ def compareSolutions(base,others):
         #name.append(others[idx])
         fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx].name,base[baseIdx].name,idb[a.instance_uid].num_points])
 
-    #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
+    fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
     #fullList = sorted(fullList,key = lambda entry : entry[4])
     zippedList = [e[0] for e in fullList]
     diff = [e[1] for e in fullList]

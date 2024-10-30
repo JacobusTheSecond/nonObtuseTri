@@ -8,22 +8,23 @@ import threading
 import time
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use("TkAgg")
+#matplotlib.use("TkAgg")
 from pathlib import Path
 
 import numpy as np
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
 exact = True
 if exact:
-    from exactTriangulation import Triangulation
+    #from exactTriangulation import Triangulation
+    from Triangulation import Triangulation,QualityImprover
 
     def improveQuality(instance: Cgshop2025Instance, withShow=True, axs=None, verbosity=0,seed=None):
         # print("WORK IN PROGRESS. PROCEED WITH CARE.")
         triangulation = Triangulation(instance, withValidate=False,seed=seed,axs=axs)
-        l = len(triangulation.triangles)
+        qi = QualityImprover(triangulation)
         if (withShow):
             plt.ion()
-        return triangulation.improveQuality(axs, verbosity)
+        return qi.improve()
 else:
     from QualityImprover import improveQuality
 
