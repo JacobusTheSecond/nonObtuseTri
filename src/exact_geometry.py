@@ -186,6 +186,39 @@ def binaryIntersection(m:Point,rsqr:FieldNumber,pq:Segment):
                 inside = mid
         return "nonexact",outside
 
+def binaryIntersectionInside(m:Point,rsqr:FieldNumber,pq:Segment):
+    p = pq.source()
+    q = pq.target()
+    pQuery = inCircle(m,rsqr,p)
+    qQuery = inCircle(m,rsqr,q)
+    inside = None
+    outside = None
+    if pQuery == "on":
+        return "exact", p
+    elif pQuery == "outside":
+        outside = p
+    else:
+        inside = p
+    if qQuery == "on":
+        return "exact", q
+    elif qQuery == "outside":
+        outside = q
+    else:
+        inside = q
+    if inside == None or outside == None:
+        return "exact",None
+    else:
+        while Segment(inside,outside).squared_length() > FieldNumber(0.00000000001):
+            mid = inside.scale(FieldNumber(0.5)) + outside.scale(FieldNumber(0.5))
+            midQ = inCircle(m,rsqr,mid)
+            if midQ == "on":
+                return "exact", mid
+            elif midQ == "outside":
+                outside = mid
+            else:
+                inside = mid
+        return "nonexact",inside
+
 def supportingRayIntersect(seg1:Segment, seg2:Segment):
     x1,y1 = seg1.source()
     x2,y2 = seg1.target()

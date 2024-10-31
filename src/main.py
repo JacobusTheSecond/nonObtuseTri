@@ -8,7 +8,7 @@ import threading
 import time
 import matplotlib.pyplot as plt
 import matplotlib
-#matplotlib.use("TkAgg")
+matplotlib.use("TkAgg")
 from pathlib import Path
 
 import numpy as np
