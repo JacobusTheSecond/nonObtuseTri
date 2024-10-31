@@ -80,7 +80,7 @@ def dropAltitudesOnSegments(Ain,Aexact,Aplot,axs,dontDrop = False, aggressive = 
     altitudeMap = dict()
     while not (completeIt and inserted == False):
         # print(completeIt,inserted)
-        if inserted == False:
+        if not inserted:
             restartIdx = 0
         completeIt = restartIdx == 0
         if completeIt:
