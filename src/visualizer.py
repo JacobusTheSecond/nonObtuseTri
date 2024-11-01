@@ -123,7 +123,7 @@ def compareSolutions(base,others):
         fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx].name,base[baseIdx].name,idb[a.instance_uid].num_points])
 
     #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
-    fullList = sorted(fullList,key = lambda entry : entry[4])
+    #fullList = sorted(fullList,key = lambda entry : entry[4])
     zippedList = [e[0] for e in fullList]
     diff = [e[1] for e in fullList]
     name = [e[2] for e in fullList]
@@ -192,11 +192,12 @@ if __name__=="__main__":
     withFace = filepath.parent.parent/"instance_solutions"/"withFaceExpansion"
     out = filepath.parent.parent/"instance_solutions"/"out"
     output = filepath.parent.parent/"instance_solutions"/"output"
+    withComplicatedCenter = filepath.parent.parent/"instance_solutions"/"withComplicatedCenter"
 
     allexceptnumeric = []
-    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,out]:
+    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,out,output]:
         allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    compareSolutions(base=[v for v in output.iterdir()],others=allexceptnumeric)
+    compareSolutions(others=[v for v in withComplicatedCenter.iterdir()],base=allexceptnumeric)
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
