@@ -1,3 +1,6 @@
+import time
+
+import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
 from cgshop2025_pyutils import Cgshop2025Solution, Cgshop2025Instance
@@ -9,7 +12,9 @@ import triangle as tr  # https://rufat.be/triangle/
 
 import logging
 
-logging.basicConfig(format="%(asctime)s %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.INFO)
+from src.exact_geometry import rayIntersectsCircle, inCircle
+
+logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
 
 # some useful constants
 outerFace = np.iinfo(int).max
@@ -193,6 +198,7 @@ class GeometricSubproblem:
     def solve(self, k=1):
         if self.wasSolved:
             return self.eval, self.sol
+        #print(len(self.boundaryVertices),end="")
         # eval estimates how good this solution is compared to what we had. Overestimates how had a bad triangle is, to weight fixing more
         baseEval = - len(self.insideSteiners) - (2 * self.numBadTris)
         if k == 1:
@@ -202,6 +208,7 @@ class GeometricSubproblem:
                 if soltype == "None":
                     bestEval, bestSol = None, None
                     for bIdx in range(len(self.boundarySegs)):
+                        #print(".",end="")
                         con = self.boundarySegs[bIdx]
                         con = [np.where(self.boundaryVertices == con[0])[0][0],
                                np.where(self.boundaryVertices == con[1])[0][0]]
@@ -267,14 +274,18 @@ class GeometricSubproblem:
 
 class Triangulation:
     def __init__(self, instance: Cgshop2025Instance, withValidate=False, seed=None, axs=None):
+        if axs == None:
+            axs = [None,None,None,None]
 
-        # _, gpaxs = plt.subplots(1,1)
-        self.gpaxs = None  # gpaxs
+        #_, gpaxs = plt.subplots(1,1)
+        self.histoaxs = axs[1]
+        self.internalaxs = axs[2]
+        self.gpaxs = axs[3] #None  # gpaxs
 
         self.withValidate = withValidate
         self.seed = seed
         self.plotTime = 0.005
-        self.axs = axs
+        self.axs = axs[0]
         self.plotWithIds = self.withValidate
 
         def convert(data: Cgshop2025Instance):
@@ -406,6 +417,8 @@ class Triangulation:
     ####
 
     def plotTriangulation(self):
+        if self.axs == None:
+            return
         self.axs.clear()
         self.axs.set_facecolor('lightgray')
         SC = self.getNumSteiner()
@@ -456,7 +469,9 @@ class Triangulation:
         sizes = np.array(self.pointTopologyChanged, dtype=int) * (maxSize - minSize) + minSize
         self.axs.scatter(*self.numericVerts[:self.instanceSize].T, s=sizes[:self.instanceSize], color='black',
                          zorder=100)
-        self.axs.scatter(*self.numericVerts[self.instanceSize:].T, s=sizes[self.instanceSize:], color='red', zorder=100)
+        for i in self.validVertIdxs():
+            if i >= self.instanceSize:
+                self.axs.scatter(*self.numericVerts[i].T, s=sizes[i], color='red', zorder=100)
         if self.plotWithIds:
             for idx in self.validVertIdxs():
                 if idx < self.instanceSize:
@@ -473,8 +488,9 @@ class Triangulation:
 
     def solutionParse(self):
         inneredges = []
+        idxs = self.validVertIdxs()
         for tri in self.validTris():
-            edges = ([tri[0], tri[1]], [tri[1], tri[2]], [tri[2], tri[0]])
+            edges = [[np.where(idxs == tri[i])[0][0] for i in internal] for internal in [[0,1],[1,2],[2,0]]]
             # check if edge is already added or are in segments
             for e in edges:
                 exists = False
@@ -668,6 +684,39 @@ class Triangulation:
             if otherIdx != outerFace and otherIdx != noneFace:
                 for i in range(3):
                     self.edgeTopologyChanged[otherIdx, i] = True
+
+    def getCoordinateQuality(self):
+        maxQuality = 0
+        for vIdx in self.validVertIdxs():
+            if vIdx < self.instanceSize:
+                continue
+            for coord in self.exactVerts[vIdx]:
+                if (q:= len(coord.exact())) > maxQuality:
+                    maxQuality = q
+        return maxQuality
+
+    def plotCoordinateQuality(self):
+        if self.histoaxs == None:
+            return
+        self.histoaxs.clear()
+        qualities = []
+        for vIdx in self.validVertIdxs():
+            if vIdx < self.instanceSize:
+                continue
+            for coord in self.exactVerts[vIdx]:
+                qualities.append(len(coord.exact()))
+
+        hist, bins = np.histogram(qualities, bins=20)
+        logbins = np.logspace(min(1,np.log10(bins[0])), max(2,np.log10(bins[-1])), len(bins))
+        self.histoaxs.hist(qualities, bins=logbins)
+        self.histoaxs.set_xscale('log')
+        self.histoaxs.set_yscale('log')
+        self.histoaxs.get_xaxis().set_major_formatter(matplotlib.ticker.FormatStrFormatter('%.0f'))
+        self.histoaxs.get_yaxis().set_major_formatter(matplotlib.ticker.FormatStrFormatter('%.0f'))
+        self.histoaxs.set_xlim((min(10,self.histoaxs.get_xlim()[0]),max(101,self.histoaxs.get_xlim()[1])))
+        self.histoaxs.set_ylim((1,max(11,self.histoaxs.get_ylim()[1])))
+        #self.histoaxs.get_xlim
+        #self.histoaxs.hist(qualities,bins=min(30,max(qualities)))
 
     ####
     # internal medium level modifiers with internal logic. HERE BE DRAGONS!
@@ -1278,7 +1327,7 @@ class Triangulation:
 
         return source, sharedTris
 
-    def getEnclosementOfLink(self, vIdxs):
+    def internalGetEnclosementOfLink(self, vIdxs):
         connections = [[vIdxs[i], vIdxs[i + 1]] for i in range(len(vIdxs) - 1)]
 
         def inConnections(edge):
@@ -1423,6 +1472,10 @@ class Triangulation:
             else:
                 boundaryConstraints.append(con)
 
+        return vIdxs,insideFaces,link,insideConstraints, boundaryConstraints
+
+    def getEnclosementOfLink(self,vIdxs):
+        vIdxs,insideFaces,link, insideConstraints,boundaryConstraints = self.internalGetEnclosementOfLink(vIdxs)
         boundaryConstraintTypes = self.segmentType[boundaryConstraints]
         numBad = len(np.where(self.badTris[list(set(insideFaces))] == True)[0])
         return GeometricSubproblem(vIdxs, insideFaces, link, self.exactVerts[vIdxs + link],
@@ -1462,7 +1515,7 @@ class Triangulation:
                     triIdx, opp = self.vertexMap[vIdx][0]
                     target = self.triangles[triIdx, (opp + 1) % 3]
 
-                logging.info("merging " + str(vIdx) + " into " + str(target))
+                logging.debug("merging " + str(vIdx) + " into " + str(target))
                 unlinkedVertex, unlinkedTris = self.internalMergePoints(vIdx, target)
                 trianglePool += list(unlinkedTris)
                 vertexPool += [unlinkedVertex]
@@ -1475,10 +1528,10 @@ class Triangulation:
                 if soltype == "vertex":
                     # todo: only relevant faces
                     self.ensureDelauney(None)
-                    logging.info("vertex-solution: i.e. just remove the inside steinerpoints")
+                    logging.debug("vertex-solution: i.e. just remove the inside steinerpoints")
                 else:
                     self.addPoint(point)
-                    logging.info("inside-solution: the solving point will be added")
+                    logging.debug("inside-solution: the solving point will be added")
 
             pass
         # 1. unlink all steinerpoints in the inside
@@ -1486,11 +1539,14 @@ class Triangulation:
         pass
 
     def findComplicatedCenter(self, triIdx):
-        self.axs.clear()
+        withPlot = (self.internalaxs != None)
+        if withPlot:
+            self.internalaxs.clear()
         self.validateCircumcenters()
         assert (self.badTris[triIdx])
         tri = self.triangles[triIdx]
         myCC = Point(*self.circumCenters[triIdx])
+        myCRsq = self.circumRadiiSqr[triIdx]
         # figure out the shortest side of the triangle
         baseId = 0
         otherId = 1
@@ -1508,11 +1564,12 @@ class Triangulation:
         otherNumeric = self.numericVerts[tri[otherId]]
         farNumeric = self.numericVerts[tri[farId]]
 
-        self.axs.scatter(*baseNumeric.T)
-        self.axs.scatter(*otherNumeric.T)
-        self.axs.scatter(*farNumeric.T)
-        self.axs.plot([baseNumeric[0], otherNumeric[0], farNumeric[0], baseNumeric[0]],
-                      [baseNumeric[1], otherNumeric[1], farNumeric[1], baseNumeric[1]])
+        if withPlot:
+            self.internalaxs.scatter(*baseNumeric.T)
+            self.internalaxs.scatter(*otherNumeric.T)
+            self.internalaxs.scatter(*farNumeric.T)
+            self.internalaxs.plot([baseNumeric[0], otherNumeric[0], farNumeric[0], baseNumeric[0]],
+                          [baseNumeric[1], otherNumeric[1], farNumeric[1], baseNumeric[1]])
 
         # now baseId and otherId are at the short edge and farId is at the far distance. now to figure out the direction
         diff = other - base
@@ -1524,185 +1581,173 @@ class Triangulation:
         mid = eg.altitudePoint(Segment(Point(FieldNumber(0), FieldNumber(0)), orth), myCC - base)
         orth = mid.scale(FieldNumber(2))
 
-        self.axs.scatter([float(myCC[0])], [float(myCC[1])], marker='.', color='yellow', zorder=1000)
-        circle = plt.Circle((float(myCC[0]), float(myCC[1])), np.sqrt(float(self.circumRadiiSqr[triIdx])),
-                            color="yellow", fill=False, zorder=1000)
-        self.axs.add_patch(circle)
+        if withPlot:
+            self.internalaxs.scatter([float(myCC[0])], [float(myCC[1])], marker='.', color='yellow', zorder=1000)
+            circle = plt.Circle((float(myCC[0]), float(myCC[1])), np.sqrt(float(self.circumRadiiSqr[triIdx])),
+                                color="yellow", fill=False, zorder=1000)
+            self.internalaxs.add_patch(circle)
 
-        self.axs.plot([baseNumeric[0], float((base + orth).x())], [baseNumeric[1], float((base + orth).y())])
-        self.axs.plot([otherNumeric[0], float((other + orth).x())], [otherNumeric[1], float((other + orth).y())])
+            self.internalaxs.plot([baseNumeric[0], float((base + orth).x())], [baseNumeric[1], float((base + orth).y())])
+            self.internalaxs.plot([otherNumeric[0], float((other + orth).x())], [otherNumeric[1], float((other + orth).y())])
 
-        # orth now describes the orthogonal ray from base and other in the direction of the circumcenter
-        candidatePoints = []
+        boundingSegments = [Segment(base,other),Segment(base,base+orth),Segment(other,other+orth)]
 
-        # fist we simply find all circumcenters, i.e. voronoi vertices, that lie inside the slab
-        for otherTriIdx in self.validTriIdxs():
-            otherCC = self.circumCenters[otherTriIdx]
+        #we now traverse the voronoi diagram figuring out all local edges that intersect the circle
+        handledFacePairs = []
+        encounteredSegments = []
+        closestPointToIntersectingSegment = []
+        intersectingSegmentsAsFacePairs = []
+        intersectingSegments = []
+        candidateFaces = [vIdx for vIdx in self.triangles[triIdx]]
+        alreadyHandled = []
 
-            # outside
-            if eg.distsq(myCC, otherCC) > self.circumRadiiSqr[triIdx]:
-                continue
+        def hasBeenOrWillBeHandled(qFace):
+            if qFace in alreadyHandled:
+                return True
+            if qFace in candidateFaces:
+                return True
+            return False
 
-            # outside slab
-            if eg.dot(other - base, otherCC - base) < FieldNumber(0):
-                continue
-            if eg.dot(base - other, otherCC - other) < FieldNumber(0):
-                continue
-            if eg.dot(orth, otherCC - base) < FieldNumber(0):
-                continue
+        def isInEdgeSet(edgeSet,qEdge):
+            for edge in edgeSet:
+                if (edge[0] == qEdge[0] and edge[1] == qEdge[1]) or (edge[0] == qEdge[1] and edge[1] == qEdge[0]):
+                    return True
+            return False
 
-            candidatePoints.append([self.circumRadiiSqr[otherTriIdx], otherCC])
-            self.axs.scatter([float(otherCC[0])], [float(otherCC[1])], marker='*', color='red', zorder=1000)
+        while len(candidateFaces)>0:
+            #construct face
+            candidateFace = candidateFaces.pop(0)
+            alreadyHandled.append(candidateFace)
+            faceSegments = []
+            originInternal = []
+            opposingFace = []
+            for actualTriIdx,internal in self.vertexMap[candidateFace]:
+                for i in range(1,3):
+                    #if not hasBeenOrWillBeHandled(self.triangles[actualTriIdx,(internal+i)%3]):
+                    #    candidateFaces.append(self.triangles[actualTriIdx,(internal+i)%3])
+                    candidateEdge = [actualTriIdx,self.triangleMap[actualTriIdx,(internal + i)%3,0]]
+                    if not isInEdgeSet(faceSegments,candidateEdge):
+                        opposingFace.append(self.triangles[actualTriIdx,(internal + (3-i))%3])
+                        faceSegments.append(candidateEdge)
+                        originInternal.append((internal + i)%3)
 
-        # next we find all candidate intersections of voronoi edges with the region. afterwards we verify that they are indeed inside the region
+            for i in range(len(faceSegments)):
+                origin,target = faceSegments[i]
+                if target != outerFace and isInEdgeSet(handledFacePairs,[origin,target]):
+                    continue
+                handledFacePairs.append([origin,target])
+                internal = originInternal[i]
+                oppFace = opposingFace[i]#this is a vertex index
+                if (segId := self.triangleMap[origin,internal,2]) != noneEdge:
+                    if segId not in encounteredSegments:
+                        if eg.segmentIntersectsCircle(myCC,myCRsq,Segment(self.point(self.segments[segId,0]),self.point(self.segments[segId,1]))):
+                            encounteredSegments.append(segId)
+                            p = self.numericVerts[self.segments[segId][0]]
+                            q = self.numericVerts[self.segments[segId][1]]
+                            if withPlot:
+                                self.internalaxs.plot([p[0],q[0]],[p[1],q[1]],color="black")
+                if target == outerFace:
+                    diff = self.point(self.triangles[origin,(internal+1)%3]) - self.point(self.triangles[origin,(internal+2)%3])
+                    voronoiOrth = Point(FieldNumber(0) - diff.y(), diff.x())
+                    if eg.dot(voronoiOrth,self.point(self.triangles[origin,internal]) - self.point(self.triangles[origin,(internal+1)%3])) > FieldNumber(0):
+                        voronoiOrth = voronoiOrth.scale(FieldNumber(-1))
+                    #voronoiOrth is now the direction pointing away from the vertex opposing the outer face
+                    inter = eg.supportingRayIntersectSegment(Segment(Point(*self.circumCenters[origin]),Point(*self.circumCenters[origin])+voronoiOrth),Segment(self.point(self.triangles[origin,(internal+1)%3]),self.point(self.triangles[origin,(internal+2)%3])))
+                    inter = eg.roundExactOnSegment(Segment(self.point(self.triangles[origin,(internal+1)%3]),self.point(self.triangles[origin,(internal+2)%3])),inter)
+                    assert(inter is not None)
+                    actualSeg = Segment(Point(*self.circumCenters[origin]),inter)
+                    if eg.segmentIntersectsCircle(myCC,myCRsq,actualSeg):
+                        if not hasBeenOrWillBeHandled(oppFace):
+                            candidateFaces.append(oppFace)
+                        intersectingSegments.append(["segment",actualSeg])
+                        intersectingSegmentsAsFacePairs.append([origin,target])
+                        closestPointToIntersectingSegment.append(candidateFace)
+                        numActualSeg = [[float(p.x()), float(p.y())] for p in [actualSeg.source(), actualSeg.target()]]
+                        if withPlot:
+                            self.internalaxs.scatter([numActualSeg[0][0], numActualSeg[1][0]],
+                                             [numActualSeg[0][1], numActualSeg[1][1]], marker='*', color='lime',
+                                             zorder=99)
+                            self.internalaxs.plot([numActualSeg[0][0], numActualSeg[1][0]],
+                                          [numActualSeg[0][1], numActualSeg[1][1]], color='lime', zorder=99)
+                            pass
+
+                else:
+                    actualSeg = Segment(Point(*self.circumCenters[origin]),Point(*self.circumCenters[target]))
+                    #print(origin,target)
+                    if eg.segmentIntersectsCircle(myCC,myCRsq,actualSeg):
+                        if not hasBeenOrWillBeHandled(oppFace):
+                            candidateFaces.append(oppFace)
+                        intersectingSegments.append(["ray",actualSeg])
+                        intersectingSegmentsAsFacePairs.append([origin,target])
+                        closestPointToIntersectingSegment.append(candidateFace)
+                        numActualSeg = [[float(p.x()),float(p.y())] for p in [actualSeg.source(),actualSeg.target()]]
+                        if withPlot:
+                            self.internalaxs.scatter([numActualSeg[0][0],numActualSeg[1][0]], [numActualSeg[0][1],numActualSeg[1][1]],marker='*', color='green', zorder=100)
+                            self.internalaxs.plot([numActualSeg[0][0],numActualSeg[1][0]], [numActualSeg[0][1],numActualSeg[1][1]], color='green', zorder=100)
+                            pass
+
+
         candidateIntersections = []
-        for otherTriIdx in self.validTriIdxs():
-            for i in range(3):
-                if self.triangleMap[otherTriIdx, i, 0] == outerFace:
-                    continue
-                # stop doublecounting
-                if self.triangleMap[otherTriIdx, i, 0] < otherTriIdx:
-                    continue
-                voronoiEdge = Segment(Point(*self.circumCenters[otherTriIdx]),
-                                      Point(*self.circumCenters[self.triangleMap[otherTriIdx, i, 0]]))
-                self.axs.scatter([float(self.circumCenters[otherTriIdx][0])],
-                                 [float(self.circumCenters[otherTriIdx][1])], marker='*', color='green', zorder=100)
-                self.axs.scatter([float(self.circumCenters[self.triangleMap[otherTriIdx, i, 0]][0])],
-                                 [float(self.circumCenters[self.triangleMap[otherTriIdx, i, 0]][1])], marker='*',
-                                 color='green', zorder=100)
-                # self.axs.plot([float(self.circumCenters[otherTriIdx][0]),float(self.circumCenters[self.triangleMap[otherTriIdx,i,0]][0])],[float(self.circumCenters[otherTriIdx][1]),float(self.circumCenters[self.triangleMap[otherTriIdx,i,0]][1])],color="green")
+        roundable=[]
+        for i in range(len(intersectingSegments)):
+            type,seg = intersectingSegments[i]
+            closestPoint = self.point(closestPointToIntersectingSegment[i])
 
-                midQ = eg.altitudePoint(voronoiEdge, myCC)
-                # intersect voronoiEdge with every segment, as this may also be of interest, but only if the voronoi edge intersects the disk
-                intersects = False
+            #intersect segment with the three boundingbox segments, the circle and ever encountered segment.
+            if type == "segment":
+                #add the points themselves
+                #TODO: remove double conting here, but not tooo important
+                candidateIntersections.append([eg.distsq(closestPoint,seg.source()),seg.source()])
+                roundable.append(True)
+                candidateIntersections.append([eg.distsq(closestPoint,seg.target()),seg.target()])
+                roundable.append(True)
 
-                # general position shit
-                if voronoiEdge.squared_length() != FieldNumber(0):
-
-                    # check if it intersects under the assumption that the points dont coincide
-                    if not intersects and (eg.inCircle(myCC, self.circumRadiiSqr[triIdx],
-                                                       voronoiEdge.target()) != "outside" or eg.inCircle(myCC,
-                                                                                                         self.circumRadiiSqr[
-                                                                                                             triIdx],
-                                                                                                         voronoiEdge.source()) != "outside"):
-                        intersects = True
-                    else:
-                        if not intersects and eg.inCircle(myCC, self.circumRadiiSqr[triIdx], midQ) != "outside":
-                            if eg.dot(voronoiEdge.target() - voronoiEdge.source(),
-                                      midQ - voronoiEdge.source()) >= FieldNumber(0) and eg.dot(
-                                    voronoiEdge.source() - voronoiEdge.target(),
-                                    midQ - voronoiEdge.target()) >= FieldNumber(0):
-                                intersects = True
-
-                if not intersects:
-                    # the segment does not intersect the circle at all
-                    self.axs.plot([float(self.circumCenters[otherTriIdx][0]),
-                                   float(self.circumCenters[self.triangleMap[otherTriIdx, i, 0]][0])],
-                                  [float(self.circumCenters[otherTriIdx][1]),
-                                   float(self.circumCenters[self.triangleMap[otherTriIdx, i, 0]][1])], color="lime")
-
-                    continue
-                else:
-                    self.axs.plot([float(self.circumCenters[otherTriIdx][0]),
-                                   float(self.circumCenters[self.triangleMap[otherTriIdx, i, 0]][0])],
-                                  [float(self.circumCenters[otherTriIdx][1]),
-                                   float(self.circumCenters[self.triangleMap[otherTriIdx, i, 0]][1])], color="green")
-
-                    for seg in self.segments:
-                        segSource = self.point(seg[0])
-                        segTarget = self.point(seg[1])
-                        self.axs.plot([self.numericVerts[seg[0]][0], self.numericVerts[seg[1]][0]],
-                                      [self.numericVerts[seg[0]][1], self.numericVerts[seg[1]][1]], color="black")
-                        if (inter := eg.innerIntersect(segSource, segTarget, voronoiEdge.source(),
-                                                       voronoiEdge.target())) is not None:
-                            if eg.inCircle(myCC, self.circumRadiiSqr[triIdx], inter) != "outside":
-                                dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]), inter)
-                                candidateIntersections.append([dist, inter])
-                                self.axs.scatter([float(inter[0])], [float(inter[1])], color='green', zorder=100)
-
-                # first intersect with the three segments
-                if (inter := eg.innerIntersect(base, other, voronoiEdge.source(), voronoiEdge.target())) is not None:
-                    dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]), inter)
-                    candidatePoints.append([dist, inter])
-                    self.axs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='red', zorder=1000)
-                if (
-                inter := eg.innerIntersect(base, base + orth, voronoiEdge.source(), voronoiEdge.target())) is not None:
-                    dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]), inter)
-                    candidatePoints.append([dist, inter])
-                    self.axs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='red', zorder=1000)
-                if (inter := eg.innerIntersect(other, other + orth, voronoiEdge.source(),
-                                               voronoiEdge.target())) is not None:
-                    dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]), inter)
-                    candidatePoints.append([dist, inter])
-                    self.axs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='red', zorder=1000)
-
-                outsidePoint = voronoiEdge.source()
-                otherPoint = voronoiEdge.target()
-                if eg.inCircle(myCC, self.circumRadiiSqr[triIdx], outsidePoint) == "inside":
-                    outsidePoint, otherPoint = otherPoint, outsidePoint
-                if eg.inCircle(myCC, self.circumRadiiSqr[triIdx], outsidePoint) == "inside":
-                    # both points lie inside, there is no intersection with the boundary
-                    continue
-
-                if eg.inCircle(myCC, self.circumRadiiSqr[triIdx], outsidePoint) == "on":
-                    dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]), outsidePoint)
-                    candidateIntersections.append([dist, outsidePoint])
-                    self.axs.scatter([float(outsidePoint[0])], [float(outsidePoint[1])], color='green', zorder=100)
-
-                    # lastly intersect the voronoi edge with the circle
-                    mid = eg.altitudePoint(voronoiEdge, myCC)
-
-                    if eg.dot(otherPoint - outsidePoint, mid - outsidePoint) < FieldNumber(0) or eg.dot(
-                            outsidePoint - otherPoint, mid - otherPoint) < FieldNumber(0):
-                        continue
-
-                    inCirc = eg.inCircle(myCC, self.circumRadiiSqr[triIdx], mid)
-                    if inCirc == "inside":
-                        if eg.dot(otherPoint - outsidePoint, (mid + mid - outsidePoint) - outsidePoint) >= FieldNumber(
-                                0) and eg.dot(
-                                outsidePoint - otherPoint, (mid + mid - outsidePoint) - otherPoint) >= FieldNumber(1):
-                            dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]),
-                                             mid + mid - outsidePoint)
-                            candidateIntersections.append([dist, mid + mid - outsidePoint])
-                            self.axs.scatter([float((mid + mid - outsidePoint)[0])],
-                                             [float((mid + mid - outsidePoint)[1])], color='green', zorder=100)
+            else:
+                # add the points themselves
+                # TODO: remove double conting here, but not tooo important
+                candidateIntersections.append([eg.distsq(closestPoint, seg.source()), seg.source()])
+                roundable.append(True)
+                candidateIntersections.append([eg.distsq(closestPoint, seg.target()), seg.target()])
+                roundable.append(False)
 
 
-                else:
+            #first intersect with boundingbox
+            for bbseg in boundingSegments:
+                inter = eg.innerIntersect(seg.source(),seg.target(),bbseg.source(),bbseg.target())
+                if inter != None:
+                    candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
+                    roundable.append(True)
+                    if withPlot:
+                        self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
 
-                    # lastly intersect the voronoi edge with the circle
-                    mid = eg.altitudePoint(voronoiEdge, myCC)
+            #next intersect with encountered segments
+            for encseg in encounteredSegments:
+                inter = eg.innerIntersect(self.point(self.segments[encseg,0]),self.point(self.segments[encseg,1]),seg.source(),seg.target())
+                if inter != None:
+                    inter = eg.roundExactOnSegment(Segment(self.point(self.segments[encseg,0]),self.point(self.segments[encseg,1])),inter)
+                    candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
+                    roundable.append(False)
+                    if withPlot:
+                        self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
 
-                    if eg.dot(otherPoint - outsidePoint, mid - outsidePoint) < FieldNumber(0) or eg.dot(
-                            outsidePoint - otherPoint, mid - otherPoint) < FieldNumber(0):
-                        continue
+            #find intersections with circle. this is somehow really annoying
+            p = seg.source()
+            q = seg.target()
+            inters = eg.insideIntersectionsSegmentCircle(myCC,myCRsq,seg)
+            for inter in inters:
+                candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
+                roundable.append(True)
+                if withPlot:
+                    self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
+                    pass
 
-                    inCirc = eg.inCircle(myCC, self.circumRadiiSqr[triIdx], mid)
-                    if inCirc == "outside":
-                        continue
-                    if inCirc == "on":
-                        dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]), mid)
-                        candidateIntersections.append([dist, mid])
-                        self.axs.scatter([float(mid[0])], [float(mid[1])], color='green', zorder=100)
-                    if inCirc == "inside":
-                        _, inter = eg.binaryIntersectionInside(myCC, self.circumRadiiSqr[triIdx],
-                                                               Segment(mid, outsidePoint))
-                        assert inter != None
-                        dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]), inter)
-                        candidateIntersections.append([dist, inter])
-                        self.axs.scatter([float(inter[0])], [float(inter[1])], color='green', zorder=100)
-
-                        _, inter = eg.binaryIntersectionInside(myCC, self.circumRadiiSqr[triIdx],
-                                                               Segment(mid, mid + mid - outsidePoint))
-                        assert inter != None
-
-                        if eg.dot(otherPoint - outsidePoint, inter - outsidePoint) >= FieldNumber(0) and eg.dot(
-                                outsidePoint - otherPoint, inter - otherPoint) >= FieldNumber(0):
-                            dist = eg.distsq(self.point(self.triangles[otherTriIdx, (i + 1) % 3]), inter)
-                            candidateIntersections.append([dist, inter])
-                            self.axs.scatter([float(inter[0])], [float(inter[1])], color='green', zorder=100)
-
-        for d, p in candidateIntersections:
+        candidatePoints = []
+        roundablePoint = []
+        for i in range(len(candidateIntersections)):
+            d, p = candidateIntersections[i]
+            pisRoundable = roundable[i]
+            if withPlot:
+                self.internalaxs.scatter([float(p[0])], [float(p[1])], marker="*", color='yellow', zorder=101)
             # outside
             if eg.distsq(myCC, p) > self.circumRadiiSqr[triIdx]:
                 continue
@@ -1716,25 +1761,54 @@ class Triangulation:
                 continue
 
             candidatePoints.append([d, p])
-            self.axs.scatter([float(p[0])], [float(p[1])], marker="*", color='red', zorder=1000)
+            roundablePoint.append(pisRoundable)
+            if withPlot:
+                self.internalaxs.scatter([float(p[0])], [float(p[1])], marker="*", color='red', zorder=1000)
 
         # now all candidatePoints are guaranteed to lie inside the region. we need to check finally, if the three rays from base, other and far to the point intersect some segment
         actualInside = None
         actualDist = None
-        for d, p in candidatePoints:
+        actualRoundable = None
+        for i in range(len(candidatePoints)):
+            d,p = candidatePoints[i]
+            pisRoundable = roundablePoint[i]
             intersects = False
             for i in range(3):
                 triP = self.point(tri[i])
                 for seg in self.segments:
                     segSource = self.point(seg[0])
                     segTarget = self.point(seg[1])
-                    if (inter := eg.innerIntersect(segSource, segTarget, triP, p)) != None:
+                    if (inter := eg.innerIntersect(segSource, segTarget, triP, p)) is not None:
                         intersects = True
             if not intersects:
-                if actualDist == None or d > actualDist:
+                if actualDist is None or d > actualDist:
                     actualInside = Point(*p)
                     actualDist = d
-        self.axs.scatter([float(actualInside[0])], [float(actualInside[1])], marker="*", color='blue', zorder=1000)
+                    actualRoundable = pisRoundable
+        if withPlot:
+            self.internalaxs.scatter([float(actualInside[0])], [float(actualInside[1])], marker="*", color='blue', zorder=1000)
+            self.internalaxs.set_aspect('equal')
+        if actualRoundable:
+            acc = 10
+            offset = FieldNumber(1)/FieldNumber(acc)
+            for off in [Point(FieldNumber(0),FieldNumber(0)),Point(offset,FieldNumber(0)),Point(FieldNumber(0)-offset,FieldNumber(0)),Point(FieldNumber(0),offset),Point(FieldNumber(0),FieldNumber(0)-offset)]:
+                newP = eg.roundExact(actualInside + off,acc)
+                # outside
+                if eg.distsq(myCC, newP) > self.circumRadiiSqr[triIdx]:
+                    continue
+
+                # outside slab
+                if eg.dot(other - base, newP - base) < FieldNumber(0):
+                    continue
+                if eg.dot(base - other, newP - other) < FieldNumber(0):
+                    continue
+                if eg.dot(orth, newP - base) < FieldNumber(0):
+                    continue
+
+                logging.debug("rounded point!")
+                actualInside = newP
+                break
+
         return actualInside
 
 
@@ -1745,25 +1819,51 @@ class QualityImprover:
     def improve(self):
         keepGoing = True
         lastEdit = "None"
+        plotUpdater = 0
+        round = 0
+        numSteinerHistory = []
+        numBadTriHistory = []
         while keepGoing:
+            logging.info(f"Round {round}: #Steiner = {len(self.tri.validVertIdxs()) - self.tri.instanceSize}, #>90° = {len( np.where(self.tri.badTris == True)[0])}, representation quality = {self.tri.getCoordinateQuality()}")
+            numSteinerHistory.append(len(self.tri.validVertIdxs()) - self.tri.instanceSize)
+            numBadTriHistory.append(len( np.where(self.tri.badTris == True)[0]))
+            round += 1
+            plotUpdater += 1
             # curEdit = "None"
             bestEval, bestSol, replacer = 0, None, None
             # self.tri.plotTriangulation()
-            logging.info("updating Geometric problems...")
+            logging.debug("updating Geometric problems...")
             self.tri.updateGeometricProblems()
-            logging.info("completed updating Geometric problems")
-            self.tri.plotTriangulation()
+            logging.debug("completed updating Geometric problems")
+            if plotUpdater == 5:
+                logging.debug("drawing...")
+                #self.tri.plotCoordinateQuality()
+                if self.tri.histoaxs != None:
+                    self.tri.histoaxs.clear()
+                    self.tri.histoaxs.plot(numSteinerHistory,list(range(round)),color="red")
+                    self.tri.histoaxs.plot(numBadTriHistory,list(range(round)),color="mediumorchid")
+                    self.tri.histoaxs.plot(np.array(numSteinerHistory)+np.array(numBadTriHistory),list(range(round)),color="black")
+                    self.tri.histoaxs.set_xlim((0,max(numSteinerHistory[0] + numBadTriHistory[0],self.tri.histoaxs.get_xlim()[1])))
+                self.tri.plotTriangulation()
+                logging.debug("done drawing")
+                plotUpdater = 0
             self.tri.validateTriangleMap()
+            logging.debug("scraping through "+str(len(self.tri.geometricProblems))+" many geometric subproblems")
 
             for gp in self.tri.geometricProblems:
                 # gp.plotMe()
+                #start = time.time()
                 eval, sol = gp.solve()
+                #print(f"{time.time()-start:.2f}")
+                #print(")",end="")
                 if eval != None and (bestEval == None or eval < bestEval):
                     logging.info("subproblem with eval " + str(eval) + " found")
                     bestEval = eval
                     bestSol = sol
                     replacer = gp
                     # curEdit = "altitude"
+
+            logging.debug("done scraping")
 
             if bestEval == 0:
                 badTris = np.where(self.tri.badTris == True)[0]
@@ -1772,6 +1872,7 @@ class QualityImprover:
                     continue
                 added = False
                 # we add complicated ungör erten center
+                logging.debug("adding some complicated center...")
                 for triIdx in badTris:
                     center = self.tri.findComplicatedCenter(triIdx)
                     assert (center != None)
@@ -1781,11 +1882,14 @@ class QualityImprover:
                         added = True
                         break
                     else:
-                        logging.info("failed to add complicated Center of triangle " + str(triIdx))
+                        logging.error("failed to add complicated Center of triangle " + str(triIdx))
             else:
-                # replacer.plotMe()
+                if self.tri.gpaxs != None:
+                    replacer.plotMe()
                 # lastEdit = curEdit
                 logging.info("replacing identified subproblem")
                 self.tri.replaceEnclosement(replacer, bestSol)
                 self.tri.validateTriangleMap()
+        self.tri.plotTriangulation()
+        plt.pause(0.5)
         return self.tri.solutionParse()
