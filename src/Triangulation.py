@@ -420,6 +420,26 @@ class Triangulation:
             for otherIdx, oppIVIdx in self.vertexMap[vIdx]:
                 self.updateEdgeTopology(otherIdx)
 
+    def getNonSuperseededBadTris(self):
+        result = []
+        for badTri in np.where(self.badTris)[0]:
+            isNotSuperseeded = True
+            bA = eg.badAngle(self.point(self.triangles[badTri,0]),self.point(self.triangles[badTri,1]),self.point(self.triangles[badTri,2]))
+            assert bA != -1
+            internalQueries = [(bA+1)%3,(bA+2)%3]
+            for iq in internalQueries:
+                nId = self.triangleMap[badTri,iq,0]
+                if nId != outerFace and self.badTris[nId]:
+                    if self.triangleMap[badTri,iq,1] == eg.badAngle(self.point(self.triangles[nId,0]),self.point(self.triangles[nId,1]),self.point(self.triangles[nId,2])):
+                        isNotSuperseeded = False
+                        break
+            if isNotSuperseeded:
+                result.append(badTri)
+        if len(result) == 0:
+            result = np.where(self.badTris)[0]
+        return np.array(result)
+
+
     # slightly less low level modifiers
 
     def updateEdgeTopology(self, triIdx):
@@ -1627,7 +1647,7 @@ class Triangulation:
                     continue
                 dists[nId] = myDist + 1
                 actionQueue.append(nId)
-        return dists
+        return np.array(dists)
 
 
 class QualityImprover:
@@ -1734,7 +1754,7 @@ class QualityImprover:
             logging.debug("done scraping")
 
             if bestEval == 0:
-                badTris = list(np.where(self.tri.badTris == True)[0])
+                badTris = self.tri.getNonSuperseededBadTris()#list(np.where(self.tri.badTris == True)[0])
 
                 if len(badTris) == 0:
                     keepGoing = False
@@ -1744,8 +1764,8 @@ class QualityImprover:
                 logging.debug("adding some complicated center...")
                 #np.random.shuffle(badTris)
                 dists = self.tri.combinatorialDepth()
-                shallowest = np.min(np.array(dists)[badTris])
-                locs = np.where((np.array(dists) <= shallowest+1) & (self.tri.badTris))[0]
+                shallowest = np.min(dists[badTris])
+                locs = np.where((dists <= shallowest+1) & (self.tri.badTris))[0]
                 np.random.shuffle(locs)
                 shallowIdx = locs[0]
 
