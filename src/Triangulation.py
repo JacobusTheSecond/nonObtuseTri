@@ -27,7 +27,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = True#self.withValidate
+        self.plotWithIds = self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -170,6 +170,8 @@ class Triangulation:
 
         # axs.scatter([p[0] for p in self.numericVerts],[p[1] for p in self.numericVerts],marker=".")
 
+        nonsuperseeded = self.getNonSuperseededBadTris()
+
         for triIdx in self.validTriIdxs():
             tri = self.triangles[triIdx]
             cords = self.numericVerts[tri]
@@ -186,8 +188,13 @@ class Triangulation:
                     self.axs.plot(*cords[[(i + 1) % 3, (i + 2) % 3]].T, color='black', linewidth=1, zorder=98)
             if self.isBad(triIdx):
                 badCount += 1
-                t = plt.Polygon(self.numericVerts[tri], color='mediumorchid')
-                self.axs.add_patch(t)
+                if triIdx in nonsuperseeded:
+                    t = plt.Polygon(self.numericVerts[tri], color='mediumorchid')
+                    self.axs.add_patch(t)
+                else:
+                    t = plt.Polygon(self.numericVerts[tri], color='orchid')
+                    self.axs.add_patch(t)
+
             else:
                 t = plt.Polygon(self.numericVerts[tri], color='palegoldenrod')
                 self.axs.add_patch(t)
@@ -1691,6 +1698,7 @@ class QualityImprover:
         numBadTriHistory = []
         lastImprovement = round
         bestSofar = 1000
+        convergenceDetectorDict = dict()
         while keepGoing:
             logging.info(f"Round {round}: #Steiner = {len(self.tri.validVertIdxs()) - self.tri.instanceSize}, #>90° = {len( np.where(self.tri.badTris == True)[0])}, subproblems solved = {self.solver.succesfulSolves}, rep qual = {self.tri.getCoordinateQuality()}")
             numSteinerHistory.append(len(self.tri.validVertIdxs()) - self.tri.instanceSize)
@@ -1768,14 +1776,40 @@ class QualityImprover:
                 np.random.shuffle(locs)
                 shallowIdx = locs[0]
 
-                center = self.tri.findComplicatedCenter(shallowIdx)
-                assert (center != None)
-                if self.tri.addPoint(center):
-                    logging.info("successfully added complicated Center of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
-                    lastEdit = "circumcenter"
-                    added = True
+                convergenceDetectorDict[shallowIdx] = convergenceDetectorDict.get(shallowIdx,0) + 1
+                logging.info("convergence threat level: " + str(convergenceDetectorDict[shallowIdx]))
+                if convergenceDetectorDict[shallowIdx] < 10:
+                    center = self.tri.findComplicatedCenter(shallowIdx)
+                    assert (center != None)
+                    if self.tri.addPoint(center):
+                        logging.info("successfully added complicated Center of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
+                        lastEdit = "circumcenter"
+                        added = True
+                    else:
+                        logging.error("failed to add complicated Center of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
+                elif convergenceDetectorDict[shallowIdx] < 20:
+                    center = Point(*self.tri.circumCenters[shallowIdx])
+                    assert (center != None)
+                    if self.tri.addPoint(center):
+                        logging.info("successfully added circumcenter of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
+                        lastEdit = "circumcenter"
+                        added = True
+                    else:
+                        logging.error("failed to add circumcenter of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
                 else:
-                    logging.error("failed to add complicated Center of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
+                    center = Point(eg.zero,eg.zero)
+                    for i in range(3):
+                        center += self.tri.point(self.tri.triangles[shallowIdx,i])
+                    center = center.scale(FieldNumber(1)/FieldNumber(3))
+                    assert (center != None)
+                    if self.tri.addPoint(center):
+                        logging.info("successfully added centroid of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
+                        lastEdit = "circumcenter"
+                        added = True
+                    else:
+                        logging.error("failed to add centroid of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
+
+
             else:
                 if self.tri.gpaxs != None:
                     replacer.plotMe()
