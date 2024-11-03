@@ -419,6 +419,7 @@ class Triangulation:
                 self.updateEdgeTopology(otherIdx)
 
     def getNonSuperseededBadTris(self):
+        #return np.where(self.badTris)[0]
         result = []
         for badTri in np.where(self.badTris)[0]:
             isNotSuperseeded = True
