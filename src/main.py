@@ -53,10 +53,10 @@ def solveEveryInstance(solname="cur_solution.zip"):
     solutions = []
     i = 0
     axs = None
-    debugSeed = 398764591#267012647
-    debugIdx = None#7#8#88
+    debugSeed = 987744430#267012647
+    debugIdx = 29#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
-    withShow = True#True#True#(debugIdx != None) or (debugUID != None)
+    withShow = False#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         matplotlib.use("TkAgg")
         fig = plt.figure()
@@ -150,8 +150,8 @@ def init_pool_processes(the_lock,the_returner,the_seeds):
 
 
 def seeded_Multi():
-    numThreads = 8
-    total = 8
+    numThreads = 64
+    total = 128
     filepath = Path(__file__)
     idb = InstanceDatabase(
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
