@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH --account=ag_ifi_driemel
+#SBATCH --job-name=seededRuns
+#SBATCH --output=out/log
+#
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=64
+#SBATCH --partition=lm_long
+#SBATCH --mem=1000G
+#SBATCH --time=7-00:00:00
+
+module load Anaconda3
+
+source /home/${USER}/.bashrc
+source activate nonobtuse
+
+srun --unbuffered python src/main.py
