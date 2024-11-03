@@ -419,10 +419,15 @@ class StarSolver:
                     if eg.colinear(Segment(bi,bj),ci):
                         isVeryBad = True
                         break
+                    #only allow bad triangles, if it wants to drop to the outside
+                    bA = eg.badAngle(bi,bj,ci)
                     #if (bA :=eg.badAngle(bi,bj,ci)) == 2 or bA == -1:
-                    if eg.isBadTriangle(bi,bj,ci):
+                    if bA == 2:
                         bads.append(bIdx)
                         badsHash += (2**i)
+                    elif bA == 1 or bA == 0:
+                        isVeryVad = True
+                        break
                 if len(bads) > self.patialTolerance:
                     continue
                 if isVeryBad:
