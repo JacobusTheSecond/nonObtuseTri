@@ -6,13 +6,11 @@ from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 
 import exact_geometry as eg
 from constants import *
-from GeometricSubproblem import GeometricSubproblem
+from GeometricSubproblem import GeometricSubproblem, StarSolver
 
 import triangle as tr  # https://rufat.be/triangle/
 
 import logging
-
-from src.GeometricSubproblem import StarSolver
 
 class Triangulation:
     def __init__(self, instance: Cgshop2025Instance, withValidate=False, seed=0, axs=None):

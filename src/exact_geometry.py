@@ -1,6 +1,3 @@
-import logging
-from dataclasses import Field
-
 from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 import numpy as np
 from matplotlib import pyplot as plt
