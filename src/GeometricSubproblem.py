@@ -424,7 +424,7 @@ class StarSolver:
                         bads.append(bIdx)
                         badsHash += (2**i)
                     elif bA == 1 or bA == 0:
-                        isVeryVad = True
+                        isVeryBad = True
                         break
                 if len(bads) > self.patialTolerance:
                     continue
