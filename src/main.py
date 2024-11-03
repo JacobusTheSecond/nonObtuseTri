@@ -13,6 +13,9 @@ from matplotlib.pyplot import tight_layout
 matplotlib.use("TkAgg")
 from pathlib import Path
 import numpy as np
+
+logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
+
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
 exact = True
 if exact:
@@ -21,8 +24,8 @@ if exact:
 
     def improveQuality(instance: Cgshop2025Instance, withShow=True, axs=None, verbosity=0,seed=None):
         # print("WORK IN PROGRESS. PROCEED WITH CARE.")
-        triangulation = Triangulation(instance, withValidate=False,seed=seed,axs=axs)
-        qi = QualityImprover(triangulation)
+        triangulation = Triangulation(instance, withValidate=False,seed=None,axs=axs)
+        qi = QualityImprover(triangulation,seed=seed)
         if (withShow):
             plt.ion()
         return qi.improve()
@@ -51,19 +54,21 @@ def solveEveryInstance(solname="cur_solution.zip"):
     solutions = []
     i = 0
     axs = None
-    debugSeed = None#267012647
+    debugSeed = 398764591#267012647
     debugIdx = None#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
-    withShow = True#True#(debugIdx != None) or (debugUID != None)
+    withShow = True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         fig = plt.figure()
+        fig.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.2, hspace=0.2)
         gs = fig.add_gridspec(nrows=3, ncols=2, width_ratios=[2, 1],height_ratios=[1,2,2])
         fig.patch.set_facecolor('lightgray')
         ax1 = fig.add_subplot(gs[:, 0])
         ax2 = fig.add_subplot(gs[0, 1])
-        ax3 = fig.add_subplot(gs[1, 1])
-        ax4 = fig.add_subplot(gs[2, 1])
-        axs = [ax1,ax2,ax3,ax4]
+        ax3 = ax2.twinx()
+        ax4 = fig.add_subplot(gs[1, 1])
+        ax5 = fig.add_subplot(gs[2, 1])
+        axs = [ax1,ax2,ax3,ax4,ax5]
         for ax in axs:
             ax.set_facecolor('lightgray')
 
@@ -123,8 +128,9 @@ def workerFunction(index):
     idb = InstanceDatabase(
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
     for instance in idb:
-        tr = Triangulation(instance, seed=seeds[index])
-        sol = tr.improveQuality()
+        tr = Triangulation(instance)
+        qi = QualityImprover(tr,seed=seeds[index])
+        sol = qi.improve()
         lock.acquire()
         returner[index].append(sol)
         progress = np.array([len(l) for l in returner])

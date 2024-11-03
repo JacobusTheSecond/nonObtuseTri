@@ -1,292 +1,35 @@
-import time
-
+import numpy as np
 import matplotlib.ticker
 import matplotlib.pyplot as plt
-import numpy as np
 from cgshop2025_pyutils import Cgshop2025Solution, Cgshop2025Instance
 from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 
 import exact_geometry as eg
+from constants import *
+from GeometricSubproblem import GeometricSubproblem
 
 import triangle as tr  # https://rufat.be/triangle/
 
 import logging
 
-from src.exact_geometry import rayIntersectsCircle, inCircle
-
-logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
-
-# some useful constants
-outerFace = np.iinfo(int).max
-noneFace = outerFace - 1
-noneEdge = outerFace - 2
-noneVertex = outerFace - 3
-noneIntervalVertex = outerFace - 4
-
-
-class GeometricSubproblem:
-    def __init__(self, vIdxs, triIdxs, boundary, exactPoints, numericPoints, innerCons, boundaryCons, boundaryType,
-                 steinercutoff, numBadTris, axs=None):
-        # some housekeeping to have some handle on what to delete later
-
-        # lets make this better
-        self.axs = axs
-        self.triIdxs = triIdxs
-        self.exactVerts = exactPoints
-        self.numericVerts = numericPoints
-        self.numBadTris = numBadTris
-
-        self.localMap = np.array(list(vIdxs) + list(boundary))
-        self.isSteiner = [False if v < steinercutoff else True for v in self.localMap]
-
-        insideIdxs = []
-        boundaryIdxs = []
-
-        for v in vIdxs:
-            positions = np.where(self.localMap == v)[0]
-            insideIdxs.append(positions[0])
-        for v in boundary:
-            positions = np.where(self.localMap == v)[0]
-            boundaryIdxs.append(positions[0])
-
-        boundaryIdxs = np.array(boundaryIdxs)
-        insideIdxs = np.array(insideIdxs)
-
-        insideCons = []
-        for s, t in innerCons:
-            insideCons.append([np.where(self.localMap == s)[0][0], np.where(self.localMap == t)[0][0]])
-
-        outsideCons = []
-        for s, t in boundaryCons:
-            outsideCons.append([np.where(self.localMap == s)[0][0], np.where(self.localMap == t)[0][0]])
-
-        insideCons = np.array(insideCons)
-        outsideCons = np.array(outsideCons)
-        outsideType = boundaryType
-
-        # move points from boundary to inside
-        deleteList = None
-        moveInside = []
-        while deleteList is None or len(deleteList) > 0:
-            deleteList = []
-            for i in range(len(boundaryIdxs)):
-                if boundaryIdxs[i] == boundaryIdxs[(i + 2) % len(boundaryIdxs)]:
-                    deleteList.append(i)
-                    deleteList.append((i + 1) % len(boundaryIdxs))
-                    moveInside.append(boundaryIdxs[(i + 1) % len(boundaryIdxs)])
-            boundaryIdxs = np.delete(boundaryIdxs, deleteList)
-        insideIdxs = np.hstack((insideIdxs, np.array(moveInside, dtype=int)))
-
-        # now boundary should be free of repitions. assert so (otherwise we have a loop somehwere which sucks)
-        assert (len(boundaryIdxs) == len(list(set(boundaryIdxs))))
-
-        # we still have steinerpoints on the boundary, and duplicates in insidevertices and boundary vertices. remove
-        # these
-        deleteList = []
-        moveInside = []
-        for i in range(len(boundaryIdxs)):
-            bIdx = boundaryIdxs[i]
-            if self.isSteiner[bIdx]:
-                if len(outsideCons) > 0:
-                    edgeIds = np.where((outsideCons[:, 0] == bIdx) | (outsideCons[:, 1] == bIdx))[0]
-                    edges = outsideCons[edgeIds]
-                    assert (len(edges) <= 2)
-                    if len(edges) == 2:
-                        if outsideType[edgeIds[0]] and outsideType[edgeIds[1]]:
-                            newSeg = []
-                            for e in edges:
-                                newSeg.append(e[np.where(e != bIdx)][0])
-                            outsideCons[edgeIds[0]] = newSeg
-                            outsideCons = np.delete(outsideCons, [edgeIds[1]], axis=0)
-                            outsideType = np.delete(outsideType, [edgeIds[1]], axis=0)
-                            deleteList.append(i)
-                            moveInside.append(bIdx)
-        boundaryIdxs = np.delete(boundaryIdxs, deleteList)
-        insideIdxs = np.hstack((insideIdxs, np.array([v for v in moveInside if v not in insideIdxs], dtype=int)))
-
-        # boundary should now be free of steinerpoints on proper boundaries and as such should also be intersectionfree with insideIdxs. assert so
-        for inVIdx in insideIdxs:
-            assert (inVIdx not in boundaryIdxs)
-
-        # we are left with removing unnecessary steinerpoints in the middle
-        deleteList = []
-        insideSteiners = []
-        for i in range(len(insideIdxs)):
-            iIdx = insideIdxs[i]
-            if self.isSteiner[iIdx]:
-                insideSteiners.append(iIdx)
-                deleteList.append(i)
-                if len(insideCons) > 0:
-                    edgeIds = np.where((insideCons[:, 0] == iIdx) | (insideCons[:, 1] == iIdx))[0]
-                    edges = insideCons[edgeIds]
-                    assert (len(edges) == 2 or len(edges) == 0)
-                    if len(edges) == 2:
-                        newSeg = []
-                        for e in edges:
-                            newSeg.append(e[np.where(e != iIdx)][0])
-                        insideCons[edgeIds[0]] = newSeg
-                        insideCons = np.delete(insideCons, [edgeIds[1]], axis=0)
-
-        assert (len(outsideCons) == len(outsideType))
-
-        self.insideVertices = np.delete(insideIdxs, deleteList)
-        self.insideSteiners = np.array(insideSteiners)
-        self.boundaryVertices = boundaryIdxs
-        self.boundarySegs = np.vstack((boundaryIdxs, np.roll(boundaryIdxs, 1))).T
-        self.segments = np.array(list(outsideCons) + list(insideCons))
-        boundaryType = []
-        for e in self.boundarySegs:
-            eIdx = self.getSegmentIdx(e)
-            if eIdx == noneEdge:
-                boundaryType.append("None")
-            elif outsideType[eIdx]:
-                boundaryType.append("boundary")
-            else:
-                boundaryType.append("halfin")
-        self.boundaryType = np.array(boundaryType)
-        self.insideSegs = insideCons
-
-        self.wasSolved = False
-        self.eval = None
-        self.sol = None
-
-        # self.plotMe()
-
-    def plotMe(self):
-        self.axs.clear()
-
-        for edgeId in range(len(self.boundarySegs)):
-            e = self.boundarySegs[edgeId]
-            color = "black"
-            if self.boundaryType[edgeId] == "halfin":
-                color = "forestgreen"
-            elif self.boundaryType[edgeId] == "boundary":
-                color = "blue"
-            self.axs.plot(*self.numericVerts[e].T, color=color, linewidth=2, zorder=98)
-
-        for edgeId in range(len(self.insideSegs)):
-            e = self.insideSegs[edgeId]
-            color = 'lime'
-            self.axs.plot(*self.numericVerts[e].T, color=color, linewidth=2, zorder=99)
-
-        for vIdx in list(self.boundaryVertices):
-            color = 'red' if self.isSteiner[vIdx] else "black"
-            self.axs.scatter(*self.numericVerts[[vIdx]].T, s=20, color=color, zorder=100)
-
-        for vIdx in list(self.insideSteiners) + list(self.insideVertices):
-            color = 'red' if self.isSteiner[vIdx] else "black"
-            self.axs.scatter(*self.numericVerts[[vIdx]].T, s=30, marker="*", color=color, zorder=100)
-
-        self.axs.set_aspect('equal')
-        plt.draw()
-        plt.pause(0.001)
-
-    def getSegmentIdx(self, querySeg):
-        if len(self.segments) == 0:
-            return noneEdge
-        locs = np.concatenate(
-            (np.argwhere(np.all((self.segments == querySeg), -1)),
-             np.argwhere(np.all((self.segments == querySeg[::-1]), -1))))
-        if len(locs) == 1:
-            return locs[0, 0]
-        else:
-            return noneEdge
-
-    def getInsideSteiners(self):
-        return self.localMap[self.insideSteiners]
-
-    def solve(self, k=1):
-        if self.wasSolved:
-            return self.eval, self.sol
-        #print(len(self.boundaryVertices),end="")
-        # eval estimates how good this solution is compared to what we had. Overestimates how had a bad triangle is, to weight fixing more
-        baseEval = - len(self.insideSteiners) - (2 * self.numBadTris)
-        if k == 1:
-            if len(self.insideSegs) == 0:
-                points = [Point(*v) for v in self.exactVerts[self.boundaryVertices]]
-                soltype, sol = eg.findCenterOfLink(points)
-                if soltype == "None":
-                    bestEval, bestSol = None, None
-                    for bIdx in range(len(self.boundarySegs)):
-                        #print(".",end="")
-                        con = self.boundarySegs[bIdx]
-                        con = [np.where(self.boundaryVertices == con[0])[0][0],
-                               np.where(self.boundaryVertices == con[1])[0][0]]
-                        if con[0] >= len(points) or con[1] >= len(points):
-                            print("wtf")
-                        constrainedSolType, constrainedSol = eg.findCenterOfLinkConstrained(points, con[0], con[1])
-                        if constrainedSolType == "None":
-                            continue
-                        elif constrainedSolType == "vertex":
-                            newEval = baseEval
-                            newSol = [[constrainedSolType, self.localMap[self.boundaryVertices[constrainedSol]]]]
-                            if bestEval is None or newEval < bestEval:
-                                bestEval = newEval
-                                bestSol = newSol
-                        else:
-                            newEval = baseEval
-                            if self.boundaryType[bIdx] == "boundary":
-                                newEval += 1
-                            elif self.boundaryType[bIdx] == "halfin":
-                                newEval += 1.25
-                            else:
-                                newEval += 2
-                            newSol = [[constrainedSolType, constrainedSol[0]]]
-                            if bestEval is None or newEval < bestEval:
-                                bestEval = newEval
-                                bestSol = newSol
-                    if bestEval is not None:
-                        self.wasSolved, self.eval, self.sol = True, bestEval, bestSol
-                        return bestEval, bestSol
-                    else:
-                        self.wasSolved, self.eval, self.sol = True, None, None
-                        return None, None
-                elif soltype == "vertex":
-                    self.wasSolved, self.eval, self.sol = True, baseEval, [
-                        [soltype, self.localMap[self.boundaryVertices[sol]]]]
-                    return baseEval, [[soltype, self.localMap[self.boundaryVertices[sol]]]]
-                else:
-                    self.wasSolved, self.eval, self.sol = True, baseEval + 1, [[soltype, sol[0]]]
-                    return baseEval + 1, [[soltype, sol[0]]]
-            elif len(self.insideSegs) == 1 and len(self.insideVertices) == 0:
-                con = self.insideSegs[0]
-                con = [np.where(self.boundaryVertices == con[0])[0][0], np.where(self.boundaryVertices == con[1])[0][0]]
-                points = [Point(*v) for v in self.exactVerts[self.boundaryVertices]]
-                solType, sol = eg.findCenterOfLinkConstrained(points, con[0], con[1])
-                if solType == "None":
-                    self.wasSolved, self.eval, self.sol = True, None, None
-                    return None, None
-                elif solType == "vertex":
-                    self.wasSolved, self.eval, self.sol = True, baseEval, [
-                        [solType, self.localMap[self.boundaryVertices[sol]]]]
-                    return baseEval, [[solType, self.localMap[self.boundaryVertices[sol]]]]
-                else:
-                    self.wasSolved, self.eval, self.sol = True, baseEval + 1, [[solType, sol[0]]]
-                    return baseEval + 1, [[solType, sol[0]]]
-
-            else:
-                self.wasSolved, self.eval, self.sol = True, None, None
-                return None, None
-        else:
-            self.wasSolved, self.eval, self.sol = True, None, None
-            return None, None
-
+from src.GeometricSubproblem import StarSolver
 
 class Triangulation:
-    def __init__(self, instance: Cgshop2025Instance, withValidate=False, seed=None, axs=None):
+    def __init__(self, instance: Cgshop2025Instance, withValidate=False, seed=0, axs=None):
         if axs == None:
-            axs = [None,None,None,None]
+            axs = [None,None,None,None,None]
 
         #_, gpaxs = plt.subplots(1,1)
         self.histoaxs = axs[1]
-        self.internalaxs = axs[2]
-        self.gpaxs = axs[3] #None  # gpaxs
+        self.histoaxtwin = axs[2]
+        self.internalaxs = axs[3]
+        self.gpaxs = axs[4] #None  # gpaxs
 
         self.withValidate = withValidate
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = self.withValidate
+        self.plotWithIds = True#self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -881,6 +624,7 @@ class Triangulation:
                             self.geometricProblems.append(self.getEnclosementOfLink(
                                 [self.triangles[triIdx, (i + 1) % 3], self.triangles[triIdx, (i + 2) % 3]]))
                 self.edgeTopologyChanged[triIdx, i] = False
+        #np.random.shuffle(self.geometricProblems)
 
     def flipEdge(self, triIdx, iVIdx):
         triA = self.triangles[triIdx]
@@ -1493,45 +1237,95 @@ class Triangulation:
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
                                    1 if self.isBad(triIdx) else 0, self.gpaxs)
 
+    def removePoint(self,vIdx):
+        #safely unlinks
+        touchedTriangles = []
+        for triIdx,_ in self.vertexMap[vIdx]:
+            touchedTriangles.append(triIdx)
+
+        #first ensure that the surrounding link is in convex position.
+        keepGoing = True
+        while keepGoing:
+            keepGoing = False
+            for triIdx,internal in self.vertexMap[vIdx]:
+                for i in range(1,3):
+                    triangleInternalRoot = (internal + i)%3
+                    if self.triangleMap[triIdx, triangleInternalRoot, 0] != outerFace and self.triangleMap[triIdx, triangleInternalRoot, 2] == noneEdge:
+                        #the edge can be flipped. now we check if we are in convex position
+                        oppInternal = self.triangleMap[triIdx, triangleInternalRoot, 1]
+                        oppV = self.triangles[self.triangleMap[triIdx, triangleInternalRoot, 0],oppInternal]
+
+                        sideA = eg.onWhichSide(Segment(self.point(self.triangles[triIdx,triangleInternalRoot]),self.point(self.triangles[triIdx,(triangleInternalRoot+1)%3])),self.point(oppV))
+                        sideB = eg.onWhichSide(Segment(self.point(self.triangles[triIdx,triangleInternalRoot]),self.point(self.triangles[triIdx,(triangleInternalRoot+2)%3])),self.point(oppV))
+
+                        if sideA == "colinear" or sideB == "colinear":
+                            continue
+                        elif sideA != sideB:
+                            #we can flip!
+                            self.flipEdge(triIdx,triangleInternalRoot)
+                            keepGoing = True
+                            break
+                if keepGoing:
+                    break
+
+        #the surrounding link should now be in convex position (up to colinearity)
+        target = None
+        segIds = np.where((self.segments[:, 0] == vIdx) | (self.segments[:, 1] == vIdx))[0]
+        assert (len(segIds) == 2 or len(segIds) == 0)
+        if len(segIds) > 0:
+            seg = self.segments[segIds[0]]
+            if seg[0] == vIdx:
+                target = seg[1]
+            else:
+                target = seg[0]
+        else:
+            triIdx, opp = self.vertexMap[vIdx][0]
+            target = self.triangles[triIdx, (opp + 1) % 3]
+
+        logging.debug("merging " + str(vIdx) + " into " + str(target))
+        self.internalMergePoints(vIdx, target)
+        self.ensureDelauney([tT for tT in touchedTriangles if self.isValidTriangle[tT]])
+
+
+
     def replaceEnclosement(self, gs: GeometricSubproblem, solution):
         if len(gs.insideSteiners) == 0 and len(solution) == 1:
-            self.addPoint(solution[0][1])
+            self.addPoint(solution[0])
         elif len(gs.insideSteiners) > 0:
 
-            trianglePool = []
-            vertexPool = []
-
             for vIdx in reversed(sorted(gs.getInsideSteiners())):
-                target = None
-                segIds = np.where((self.segments[:, 0] == vIdx) | (self.segments[:, 1] == vIdx))[0]
-                assert (len(segIds) == 2 or len(segIds) == 0)
-                if len(segIds) > 0:
-                    seg = self.segments[segIds[0]]
-                    if seg[0] == vIdx:
-                        target = seg[1]
-                    else:
-                        target = seg[0]
-                else:
-                    triIdx, opp = self.vertexMap[vIdx][0]
-                    target = self.triangles[triIdx, (opp + 1) % 3]
+                self.removePoint(vIdx)
 
-                logging.debug("merging " + str(vIdx) + " into " + str(target))
-                unlinkedVertex, unlinkedTris = self.internalMergePoints(vIdx, target)
-                trianglePool += list(unlinkedTris)
-                vertexPool += [unlinkedVertex]
+            #trianglePool = []
+            #vertexPool = []
+
+            #for vIdx in reversed(sorted(gs.getInsideSteiners())):
+            #    target = None
+            #    segIds = np.where((self.segments[:, 0] == vIdx) | (self.segments[:, 1] == vIdx))[0]
+            #    assert (len(segIds) == 2 or len(segIds) == 0)
+            #    if len(segIds) > 0:
+            #        seg = self.segments[segIds[0]]
+            #        if seg[0] == vIdx:
+            #            target = seg[1]
+            #        else:
+            #            target = seg[0]
+            #    else:
+            #        triIdx, opp = self.vertexMap[vIdx][0]
+            #        target = self.triangles[triIdx, (opp + 1) % 3]
+
+            #    logging.debug("merging " + str(vIdx) + " into " + str(target))
+            #    unlinkedVertex, unlinkedTris = self.internalMergePoints(vIdx, target)
+            #    #trianglePool += list(unlinkedTris)
+            #    #vertexPool += [unlinkedVertex]
 
             self.validateCircumcenters()
             self.validateTriangleMap()
             self.validateVertexMap()
 
-            for soltype, point in solution:
-                if soltype == "vertex":
-                    # todo: only relevant faces
-                    self.ensureDelauney(None)
-                    logging.debug("vertex-solution: i.e. just remove the inside steinerpoints")
-                else:
-                    self.addPoint(point)
-                    logging.debug("inside-solution: the solving point will be added")
+            for point in solution:
+                self.addPoint(point)
+            else:
+                self.ensureDelauney(None)
 
             pass
         # 1. unlink all steinerpoints in the inside
@@ -1649,10 +1443,15 @@ class Triangulation:
                 if target == outerFace:
                     diff = self.point(self.triangles[origin,(internal+1)%3]) - self.point(self.triangles[origin,(internal+2)%3])
                     voronoiOrth = Point(FieldNumber(0) - diff.y(), diff.x())
-                    if eg.dot(voronoiOrth,self.point(self.triangles[origin,internal]) - self.point(self.triangles[origin,(internal+1)%3])) > FieldNumber(0):
+                    if eg.dot(voronoiOrth,self.point(self.triangles[origin,(internal+1)%3]) - Point(*self.circumCenters[origin])) < FieldNumber(0):
                         voronoiOrth = voronoiOrth.scale(FieldNumber(-1))
-                    #voronoiOrth is now the direction pointing away from the vertex opposing the outer face
+                    #voronoiOrth is now the direction pointing towards the defining segment
                     inter = eg.supportingRayIntersectSegment(Segment(Point(*self.circumCenters[origin]),Point(*self.circumCenters[origin])+voronoiOrth),Segment(self.point(self.triangles[origin,(internal+1)%3]),self.point(self.triangles[origin,(internal+2)%3])))
+                    if inter == None:
+                        seg1 = Segment(Point(*self.circumCenters[origin]),Point(*self.circumCenters[origin])+voronoiOrth)
+                        seg2 = Segment(self.point(self.triangles[origin,(internal+1)%3]),self.point(self.triangles[origin,(internal+2)%3]))
+                        self.internalaxs.plot([float(seg1.source().x()),float(seg1.target().x())],[float(seg1.source().y()),float(seg1.target().y())],color="red",zorder=1000000)
+                        self.internalaxs.plot([float(seg2.source().x()),float(seg2.target().x())],[float(seg2.source().y()),float(seg2.target().y())],color="red",zorder=1000000)
                     inter = eg.roundExactOnSegment(Segment(self.point(self.triangles[origin,(internal+1)%3]),self.point(self.triangles[origin,(internal+2)%3])),inter)
                     assert(inter is not None)
                     actualSeg = Segment(Point(*self.circumCenters[origin]),inter)
@@ -1811,20 +1610,70 @@ class Triangulation:
 
         return actualInside
 
+    def combinatorialDepth(self):
+        dists = np.full((len(self.triangles)),-1)
+        actionQueue = []
+        for triIdx in self.validTriIdxs():
+            if outerFace in self.triangleMap[triIdx,:,0]:
+                dists[triIdx] = 0
+                actionQueue.append(triIdx)
+        while len(actionQueue) > 0:
+            triIdx = actionQueue.pop(0)
+            myDist = dists[triIdx]
+            assert(myDist != -1)
+            for i in range(3):
+                nId = self.triangleMap[triIdx,i,0]
+                if nId == outerFace or dists[nId] != -1:
+                    continue
+                dists[nId] = myDist + 1
+                actionQueue.append(nId)
+        return dists
+
 
 class QualityImprover:
-    def __init__(self, tri: Triangulation):
+    def __init__(self, tri: Triangulation,seed=None):
         self.tri = tri
+        self.solver = StarSolver(2,1,1,1.25,2,1)
+        if seed != None:
+            np.random.seed(seed)
+
+
+    def plotHistory(self,numSteinerHistory,numBadTriHistory,round,specialRounds,ax,twin_ax):
+
+        if ax != None:
+            ax.clear()
+            twin_ax.clear()
+            ax.plot(list(range(round)), numSteinerHistory, color="red")
+            ax.plot(list(range(round)), numBadTriHistory, color="mediumorchid")
+            ax.plot(list(range(round)), np.array(numSteinerHistory) + np.array(numBadTriHistory),
+                                   color="black")
+            ax.plot([0, max(numSteinerHistory[0] + numBadTriHistory[0], round - 1)],
+                                   [numSteinerHistory[0] + numBadTriHistory[0],
+                                    numSteinerHistory[0] + numBadTriHistory[0]], linestyle="dashed", color="black")
+            ax.set_xlim((0, max(numSteinerHistory[0] + numBadTriHistory[0], round - 1)))
+            ax.set_ylim((0, ax.get_ylim()[1]))
+            ax.set_yticks([0, numSteinerHistory[0] + numBadTriHistory[0]])
+            ax.plot([round - 1, max(numSteinerHistory[0] + numBadTriHistory[0], round - 1)],
+                                   [numSteinerHistory[-1] + numBadTriHistory[-1],
+                                    numSteinerHistory[-1] + numBadTriHistory[-1]], color="black", linestyle="dotted")
+            twin_ax.set_yticks([numSteinerHistory[-1] + numBadTriHistory[-1]])
+            twin_ax.set_ylim(ax.get_ylim())
+            b,t = ax.get_ylim()
+            for r in specialRounds:
+                ax.plot([r,r],[b,t],color="blue")
 
     def improve(self):
         keepGoing = True
         lastEdit = "None"
         plotUpdater = 0
         round = 0
+        specialRounds = []
         numSteinerHistory = []
         numBadTriHistory = []
+        lastImprovement = round
+        bestSofar = 1000
         while keepGoing:
-            logging.info(f"Round {round}: #Steiner = {len(self.tri.validVertIdxs()) - self.tri.instanceSize}, #>90° = {len( np.where(self.tri.badTris == True)[0])}, representation quality = {self.tri.getCoordinateQuality()}")
+            logging.info(f"Round {round}: #Steiner = {len(self.tri.validVertIdxs()) - self.tri.instanceSize}, #>90° = {len( np.where(self.tri.badTris == True)[0])}, subproblems solved = {self.solver.succesfulSolves}, rep qual = {self.tri.getCoordinateQuality()}")
             numSteinerHistory.append(len(self.tri.validVertIdxs()) - self.tri.instanceSize)
             numBadTriHistory.append(len( np.where(self.tri.badTris == True)[0]))
             round += 1
@@ -1834,26 +1683,45 @@ class QualityImprover:
             # self.tri.plotTriangulation()
             logging.debug("updating Geometric problems...")
             self.tri.updateGeometricProblems()
+            np.random.shuffle(self.tri.geometricProblems)
             logging.debug("completed updating Geometric problems")
-            if plotUpdater == 5:
-                logging.debug("drawing...")
+            logging.debug("drawing...")
+            self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
+            if plotUpdater == 1:
                 #self.tri.plotCoordinateQuality()
-                if self.tri.histoaxs != None:
-                    self.tri.histoaxs.clear()
-                    self.tri.histoaxs.plot(numSteinerHistory,list(range(round)),color="red")
-                    self.tri.histoaxs.plot(numBadTriHistory,list(range(round)),color="mediumorchid")
-                    self.tri.histoaxs.plot(np.array(numSteinerHistory)+np.array(numBadTriHistory),list(range(round)),color="black")
-                    self.tri.histoaxs.set_xlim((0,max(numSteinerHistory[0] + numBadTriHistory[0],self.tri.histoaxs.get_xlim()[1])))
                 self.tri.plotTriangulation()
-                logging.debug("done drawing")
                 plotUpdater = 0
+            logging.debug("done drawing")
             self.tri.validateTriangleMap()
             logging.debug("scraping through "+str(len(self.tri.geometricProblems))+" many geometric subproblems")
+
+            if len(np.where(self.tri.badTris)[0]) < bestSofar:
+                bestSofar = len(np.where(self.tri.badTris)[0])
+                lastImprovement = round
+
+            #convergence safeguard
+            if self.solver.patialTolerance > 0 and round - lastImprovement > 10:
+                self.solver.patialTolerance = max(0,self.solver.patialTolerance - 1)
+                logging.info(f"Tolerance set to {self.solver.patialTolerance}")
+                lastImprovement = round
+                specialRounds.append(round)
+
+            #be less tolerant if half the triangles are gone
+            if self.solver.patialTolerance > 1 and len(np.where(self.tri.badTris)[0]) <= max(1, numBadTriHistory[0] // 2):
+                logging.info("Tolerance set to 1")
+                self.solver.patialTolerance = 1
+                specialRounds.append(round)
+
+            #no longer be tolerant when only 10% of bad triangles are left
+            if self.solver.patialTolerance > 0 and len(np.where(self.tri.badTris)[0]) <= max(1, numBadTriHistory[0] // 10):
+                logging.info("Tolerance set to 0")
+                self.solver.patialTolerance = 0
+                specialRounds.append(round)
 
             for gp in self.tri.geometricProblems:
                 # gp.plotMe()
                 #start = time.time()
-                eval, sol = gp.solve()
+                eval, sol = self.solver.solve(gp)
                 #print(f"{time.time()-start:.2f}")
                 #print(")",end="")
                 if eval != None and (bestEval == None or eval < bestEval):
@@ -1866,30 +1734,38 @@ class QualityImprover:
             logging.debug("done scraping")
 
             if bestEval == 0:
-                badTris = np.where(self.tri.badTris == True)[0]
+                badTris = list(np.where(self.tri.badTris == True)[0])
+
                 if len(badTris) == 0:
                     keepGoing = False
                     continue
                 added = False
                 # we add complicated ungör erten center
                 logging.debug("adding some complicated center...")
-                for triIdx in badTris:
-                    center = self.tri.findComplicatedCenter(triIdx)
-                    assert (center != None)
-                    if self.tri.addPoint(center):
-                        logging.info("successfully added complicated Center of triangle " + str(triIdx))
-                        lastEdit = "circumcenter"
-                        added = True
-                        break
-                    else:
-                        logging.error("failed to add complicated Center of triangle " + str(triIdx))
+                #np.random.shuffle(badTris)
+                dists = self.tri.combinatorialDepth()
+                shallowest = np.min(np.array(dists)[badTris])
+                locs = np.where((np.array(dists) <= shallowest+1) & (self.tri.badTris))[0]
+                np.random.shuffle(locs)
+                shallowIdx = locs[0]
+
+                center = self.tri.findComplicatedCenter(shallowIdx)
+                assert (center != None)
+                if self.tri.addPoint(center):
+                    logging.info("successfully added complicated Center of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
+                    lastEdit = "circumcenter"
+                    added = True
+                else:
+                    logging.error("failed to add complicated Center of triangle " + str(shallowIdx) + " at depth " + str(dists[shallowIdx]))
             else:
                 if self.tri.gpaxs != None:
                     replacer.plotMe()
                 # lastEdit = curEdit
                 logging.info("replacing identified subproblem")
                 self.tri.replaceEnclosement(replacer, bestSol)
+                logging.info("done replacing")
                 self.tri.validateTriangleMap()
         self.tri.plotTriangulation()
+        self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
         plt.pause(0.5)
         return self.tri.solutionParse()

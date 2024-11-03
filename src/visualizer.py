@@ -195,7 +195,7 @@ if __name__=="__main__":
     withComplicatedCenter = filepath.parent.parent/"instance_solutions"/"withComplicatedCenter"
 
     allexceptnumeric = []
-    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,out,output]:
+    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,output]:
         allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])

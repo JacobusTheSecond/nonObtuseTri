@@ -7,7 +7,7 @@ from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 from exact_geometry import circumcenter
 
 plot_counter = 0
-points = [(378, 709), (472, 394), (433, 575)]
+points = [(378, 709), (433, 575), (504, 575), (744.5, 701.2), (716, 1292)]
 exactXs = [p[0] for p in points]#['1885901035659067045/17428496250830848', '187', '208', '198593701368361595683/944229799608451072', '226', '1132576691202293755/8714248125415424']
 exactYs = [p[1] for p in points]#['835550492288332099259/278855940013293568', '3011', '3021', '5817900572796388795173/1888459599216902144', '3484', '430935302576235609765/139427970006646784']
 exactPoints = [Point(FieldNumber(exactXs[i]),FieldNumber(exactYs[i])) for i in range(len(exactYs))]
