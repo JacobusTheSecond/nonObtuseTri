@@ -12,7 +12,7 @@ pip install --verbose git+https://github.com/CG-SHOP/pyutils25
 ```
 ### Execution
 Run `python src/visualizer.py`.
-By default it will compare the best solutions in `instance_solutions/exact_solutions` and `instance_solutions/numeric_solutions` to the best solutions in `instance_solutions/newestVersion`
+By default it will compare the best solutions in `instance_solutions/*` to the best solutions in `instance_solutions/withComplicatedCenter`
 
 ### The GUI
 The GUI consists of three parts:
@@ -35,4 +35,4 @@ pip install .
 pip install --verbose git+https://github.com/CG-SHOP/pyutils25
 ```
 ### Execution
-Run `src/python main.py`. The solution by default will be written to `challenge_instances_cgshop25/zips/cur_solutions.zip`
+Run `src/python main.py`. The solution by default will be written to `instance_solutions/cur_solutions.zip`
