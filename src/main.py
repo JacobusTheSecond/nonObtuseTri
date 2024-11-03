@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.pyplot import tight_layout
 
-matplotlib.use("TkAgg")
 from pathlib import Path
 import numpy as np
 
@@ -59,6 +58,7 @@ def solveEveryInstance(solname="cur_solution.zip"):
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
+        matplotlib.use("TkAgg")
         fig = plt.figure()
         fig.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.2, hspace=0.2)
         gs = fig.add_gridspec(nrows=3, ncols=2, width_ratios=[2, 1],height_ratios=[1,2,2])

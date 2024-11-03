@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 import exact_geometry as eg
 from cgshop2025_pyutils.geometry import Point, Segment, FieldNumber, intersection_point
 
-from src.exact_geometry import onWhichSide, isBadTriangle, numericPoint
-
 
 class GeometricSubproblem:
     def __init__(self, vIdxs, triIdxs, boundary, exactPoints, numericPoints, innerCons, boundaryCons, boundaryType,
@@ -212,7 +210,7 @@ class StarSolver:
                 lowestRightIdx = i
         prevI = (lowestRightIdx + (len(points) - 1))%len(points)
         nextI = (lowestRightIdx + 1)%len(points)
-        side = onWhichSide(Segment(points[prevI],lowestRight),points[nextI])
+        side = eg.onWhichSide(Segment(points[prevI],lowestRight),points[nextI])
         return side
 
     def internalK0Solve(self,gp, boundary, constraints):
@@ -230,10 +228,10 @@ class StarSolver:
             for i,j in boundary:
                 if i == pIdx or j == pIdx:
                     continue
-                if onWhichSide(Segment(self.points[i],self.points[j]),p) != "left":
+                if eg.onWhichSide(Segment(self.points[i],self.points[j]),p) != "left":
                     isGood = False
                     break
-                if isBadTriangle(self.points[i],self.points[j],p):
+                if eg.isBadTriangle(self.points[i],self.points[j],p):
                     isGood = False
                     break
             if isGood:
@@ -300,7 +298,7 @@ class StarSolver:
                 if eg.colinear(Segment(bi, bj), q):
                     isGood = False
                     break
-                if isBadTriangle(bi, bj, q):
+                if eg.isBadTriangle(bi, bj, q):
                     isGood = False
                     break
             if isGood:
@@ -348,7 +346,7 @@ class StarSolver:
         for i in range(len(self.points)):
             nextI = (i+1)%len(self.points)
             nextnextI = (i+2)%len(self.points)
-            if onWhichSide(Segment(self.points[i],self.points[nextI]),self.points[nextnextI]) == "right":
+            if eg.onWhichSide(Segment(self.points[i],self.points[nextI]),self.points[nextnextI]) == "right":
                 return False,[]
 
         sameRays = False
@@ -514,7 +512,7 @@ class StarSolver:
             rps = rootPoints[bIdx]
             diff = self.points[j]-self.points[i]
             orth = Point(eg.zero-diff.y(),diff.x())
-            if onWhichSide(Segment(self.points[i],self.points[j]), self.points[i] + orth) != "left":
+            if eg.onWhichSide(Segment(self.points[i],self.points[j]), self.points[i] + orth) != "left":
                 orth = orth.scale(FieldNumber(-1))
 
             for root in rps:
@@ -522,7 +520,7 @@ class StarSolver:
                 intersected = False
                 for offset in range(1,len(boundary)):
                     qId,nextQId = boundary[(bIdx+offset)%len(boundary)]
-                    if onWhichSide(ray,self.points[qId]) != "left" and onWhichSide(ray,self.points[nextQId]) != "right":
+                    if eg.onWhichSide(ray,self.points[qId]) != "left" and eg.onWhichSide(ray,self.points[nextQId]) != "right":
                         inter = eg.supportingRayIntersectSegment(ray,Segment(self.points[qId],self.points[nextQId]))
                         if inter == None:
                             #this means we are walking behind i think
