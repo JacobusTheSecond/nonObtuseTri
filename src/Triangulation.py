@@ -54,8 +54,8 @@ class Triangulation:
         segments = Ain['segments']
         triangles = Ain['triangles']
 
-        self.triangles = np.array(triangles)
-        self.segments = np.array(segments)
+        self.triangles = np.array(triangles,dtype=int)
+        self.segments = np.array(segments,dtype=int)
         self.triangleMap = None
         self.exactVerts = np.array(exactVerts, dtype=Point)
         self.numericVerts = np.array(numericVerts)
