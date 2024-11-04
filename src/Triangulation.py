@@ -637,7 +637,8 @@ class Triangulation:
         # add all faces around a single steinerpoint if it changed
         for vIdx in self.validVertIdxs():
             if self.pointTopologyChanged[vIdx] and vIdx >= self.instanceSize:
-                self.geometricProblems.append(self.getEnclosementOfLink([vIdx]))
+                if (gp := self.getEnclosementOfLink([vIdx])) is not None:
+                    self.geometricProblems.append(gp)
             self.pointTopologyChanged[vIdx] = False
 
         for triIdx in self.validTriIdxs():
@@ -647,8 +648,8 @@ class Triangulation:
                         triIdx, (i + 2) % 3] >= self.instanceSize:
                         # prevent doublecounting
                         if self.triangleMap[triIdx, i, 0] > triIdx:
-                            self.geometricProblems.append(self.getEnclosementOfLink(
-                                [self.triangles[triIdx, (i + 1) % 3], self.triangles[triIdx, (i + 2) % 3]]))
+                            if (gp := self.getEnclosementOfLink([self.triangles[triIdx, (i + 1) % 3], self.triangles[triIdx, (i + 2) % 3]])) is not None:
+                                self.geometricProblems.append(gp)
                 self.edgeTopologyChanged[triIdx, i] = False
         #np.random.shuffle(self.geometricProblems)
 
@@ -1248,10 +1249,29 @@ class Triangulation:
         vIdxs,insideFaces,link, insideConstraints,boundaryConstraints = self.internalGetEnclosementOfLink(vIdxs)
         boundaryConstraintTypes = self.segmentType[boundaryConstraints]
         numBad = len(np.where(self.badTris[list(set(insideFaces))] == True)[0])
-        return GeometricSubproblem(vIdxs, insideFaces, link, self.exactVerts[vIdxs + link],
-                                   self.numericVerts[vIdxs + link], self.segments[insideConstraints],
+        #clean up link and move their inbetween vertex to the inside. if the homotopy type is non-trivial, we return None instead
+
+        deleteList = None
+        moveInside = []
+        while deleteList is None or len(deleteList) > 0:
+            deleteList = []
+            for i in range(len(link)):
+                if link[i] == link[(i + 2) % len(link)]:
+                    deleteList.append(i)
+                    deleteList.append((i + 1) % len(link))
+                    if (newInside := link[(i + 1) % len(link)]) not in moveInside and newInside not in vIdxs:
+                        moveInside.append(link[(i + 1) % len(link)])
+            link = np.delete(link, deleteList)
+        vIdxs = np.hstack((vIdxs, np.array(moveInside, dtype=int)))
+
+        if len(link) == len(list(set(link))):
+            return GeometricSubproblem(vIdxs, insideFaces, link, self.exactVerts[list(vIdxs) + list(link)],
+                                   self.numericVerts[list(vIdxs) + list(link)], self.segments[insideConstraints],
                                    self.segments[boundaryConstraints], boundaryConstraintTypes, self.instanceSize,
                                    numBad, self.gpaxs)
+        else:
+            logging.debug("Enclosement with seed "+str(vIdxs)+" produced non-trivial homotopytype...")
+            return None
 
     def getFaceAsEnclosement(self, triIdx):
         tri = self.triangles[triIdx]
