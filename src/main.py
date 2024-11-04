@@ -13,7 +13,6 @@ from matplotlib.pyplot import tight_layout
 from pathlib import Path
 import numpy as np
 
-logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
 
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
 exact = True
@@ -45,6 +44,8 @@ def verifyAll(solname="cur_solution.zip"):
         assert not result.errors, "Expect no errors."
 
 def solveEveryInstance(solname="cur_solution.zip"):
+    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
+
     filepath = Path(__file__)
     solLoc = filepath.parent.parent/"instance_solutions"
 
@@ -150,8 +151,9 @@ def init_pool_processes(the_lock,the_returner,the_seeds):
 
 
 def seeded_Multi():
+    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     numThreads = 64
-    total = 128
+    total = 512
     filepath = Path(__file__)
     idb = InstanceDatabase(
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
@@ -190,5 +192,5 @@ def seeded_Multi():
                 print("some error occured")
 
 if __name__=="__main__":
-    #seeded_Multi()
-    solveEveryInstance()
+    seeded_Multi()
+    #solveEveryInstance()
