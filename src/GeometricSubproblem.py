@@ -61,7 +61,10 @@ class GeometricSubproblem:
         insideIdxs = np.hstack((insideIdxs, np.array(moveInside, dtype=int)))
 
         # now boundary should be free of repitions. assert so (otherwise we have a loop somehwere which sucks)
-        assert (len(boundaryIdxs) == len(list(set(boundaryIdxs))))
+        if (len(boundaryIdxs) != len(list(set(boundaryIdxs)))):
+            logging.error(str(boundaryIdxs) + "    " + str(list(set(boundaryIdxs))))
+            assert(False)
+        #assert (len(boundaryIdxs) == len(list(set(boundaryIdxs))))
 
         # we still have steinerpoints on the boundary, and duplicates in insidevertices and boundary vertices. remove
         # these
@@ -311,8 +314,11 @@ class StarSolver:
                         goodIntervals.append([s, t])
         return goodIntervals
 
-    def internalConstrainedK1Solve(self,gp,seg,boundary,rays,circles):
+    def internalConstrainedK1Solve(self,gp,seg,boundary,rays,circles,filterFunction=None):
         baseEval = - (self.faceWeight*gp.numBadTris) - (self.insideSteinerWeight*len(gp.insideSteiners))
+
+        if filterFunction is None:
+            filterFunction = lambda x: True
 
         goodIntervals = self.internalConstrainedK1Intervals(gp,seg,boundary,rays,circles)
 
@@ -322,14 +328,17 @@ class StarSolver:
                 q = seg.source() + (seg.target() - seg.source()).scale(mid)
                 newQ = eg.roundExactOnSegment(seg, q)
                 if s < eg.getParamOfPointOnSegment(seg, newQ) < t:
-                    return True, [[baseEval + 1 + self.cleanWeight, [newQ]]]
+                    if filterFunction(newQ):
+                        return True, [[baseEval + 1 + self.cleanWeight, [newQ]]]
                 else:
-                    return False, [[baseEval + 1, [q]]]
+                    if filterFunction(q):
+                        return False, [[baseEval + 1, [q]]]
 
         if len(goodIntervals) > 0:
             mid = goodIntervals[0][0]
             q = seg.source() + (seg.target() - seg.source()).scale(mid)
-            return False, [[baseEval + 1, [q]]]
+            if filterFunction(q):
+                return False, [[baseEval + 1, [q]]]
 
         return False, []
 
@@ -481,7 +490,7 @@ class StarSolver:
                     seg = Segment(self.points[i], self.points[j])
 
                     #this is only considered clean, if the internal call is clean and we drop onto boundary
-                    hasClean,sols = self.internalConstrainedK1Solve(gp,seg,[[idx,jdx] for idx,jdx in boundary if not (idx == i and jdx == j)],additionalRays,circles)
+                    hasClean,sols = self.internalConstrainedK1Solve(gp,seg,[[idx,jdx] for idx,jdx in boundary if not (idx == i and jdx == j)],baseRays + additionalRays,circles,filterFunction)
                     for _,sol in sols:
                         if len(sol) == 1:
                             if not filterFunction(sol[0]):
