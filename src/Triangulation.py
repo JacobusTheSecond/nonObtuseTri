@@ -1305,8 +1305,40 @@ class Triangulation:
             else:
                 target = seg[0]
         else:
-            triIdx, opp = self.vertexMap[vIdx][0]
-            target = self.triangles[triIdx, (opp + 1) % 3]
+            if len(self.vertexMap[vIdx]) == 3:
+                triIdx, opp = self.vertexMap[vIdx][0]
+                target = self.triangles[triIdx, (opp + 1) % 3]
+            elif len(self.vertexMap[vIdx]) == 4:
+                #there are two points that are colinear, and one of them is not on the convex hull. find this point!
+                #this is SUUUUPER rare
+                link = []
+                for triIdx, internal in self.vertexMap[vIdx]:
+                    for i in range(1,3):
+                        link.append(self.triangles[triIdx, (internal + i)%3])
+                link = list(set(link))
+                assert(len(link) == 4)
+
+                #for the VERY special case, that they are even in convex position (no three are even colinear), then any point works
+                target = link[0]
+
+                #if we are not in convex position (or three are colinear) this will select the right target
+                for i in range(4):
+                    qP = self.point(link[i])
+                    tA = self.point(link[(i+1)%4])
+                    tB = self.point(link[(i+2)%4])
+                    tC = self.point(link[(i+3)%4])
+                    tri = [tA,tB,tC]
+                    sides = []
+                    for j in range(3):
+                        sides.append(eg.onWhichSide(Segment(tri[j],tri[(j+1)%3]),qP))
+                    if "left" in sides and "right" in sides:
+                        continue
+                    else:
+                        target = link[i]
+                        break
+            else:
+                logging.error("there is a point, that is adjacent to more than 4 faces, and no two of them can be flipped...")
+                assert False
 
         logging.debug("merging " + str(vIdx) + " into " + str(target))
         self.internalMergePoints(vIdx, target)
