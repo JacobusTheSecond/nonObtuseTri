@@ -1360,7 +1360,7 @@ class Triangulation:
                         target = link[i]
                         break
             else:
-                logging.error("there is a point, that is adjacent to more than 4 faces, and no two of them can be flipped...")
+                logging.error(str(self.seed) + ": there is a point, that is adjacent to more than 4 faces, and no two of them can be flipped...")
                 assert False
 
         logging.debug("merging " + str(vIdx) + " into " + str(target))
@@ -1898,7 +1898,7 @@ class QualityImprover:
                         lastEdit = "circumcenter"
                         added = True
                     else:
-                        logging.error("failed to add complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
+                        logging.error(str(self.tri.seed) + ": failed to add complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                 elif convergenceDetectorDict[centerFindIdx] < 20:
                     center = Point(*self.tri.circumCenters[centerFindIdx])
                     assert (center != None)
@@ -1907,7 +1907,7 @@ class QualityImprover:
                         lastEdit = "circumcenter"
                         added = True
                     else:
-                        logging.error("failed to add circumcenter of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
+                        logging.error(str(self.tri.seed) + ": failed to add circumcenter of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                 else:
                     center = Point(eg.zero,eg.zero)
                     for i in range(3):
@@ -1919,7 +1919,7 @@ class QualityImprover:
                         lastEdit = "circumcenter"
                         added = True
                     else:
-                        logging.error("failed to add centroid of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
+                        logging.error(str(self.tri.seed) + ": failed to add centroid of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
 
 
             else:
