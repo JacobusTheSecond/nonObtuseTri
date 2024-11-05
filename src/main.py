@@ -152,8 +152,8 @@ def init_pool_processes(the_lock,the_returner,the_seeds):
 
 def seeded_Multi():
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
-    numThreads = 64
-    total = 512
+    numThreads = 192
+    total = 384
     filepath = Path(__file__)
     idb = InstanceDatabase(
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
@@ -192,5 +192,5 @@ def seeded_Multi():
                 print("some error occured")
 
 if __name__=="__main__":
-    #seeded_Multi()
-    solveEveryInstance()
+    seeded_Multi()
+    #solveEveryInstance()
