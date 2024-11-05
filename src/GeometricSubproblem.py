@@ -1,6 +1,5 @@
 import logging
 
-import numpy as np
 from constants import *
 import matplotlib.pyplot as plt
 import exact_geometry as eg
