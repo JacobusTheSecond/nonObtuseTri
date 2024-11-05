@@ -188,5 +188,5 @@ def seeded_Multi():
                 print("some error occured")
 
 if __name__=="__main__":
-    seeded_Multi()
-    #solveEveryInstance()
+    #seeded_Multi()
+    solveEveryInstance()
