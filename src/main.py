@@ -1,14 +1,10 @@
-#import concurrent.futures
 import multiprocessing
 import sys
-from functools import partial
 from multiprocessing import Pool, Lock
 import logging
-import threading
 import time
 import matplotlib.pyplot as plt
 import matplotlib
-from matplotlib.pyplot import tight_layout
 
 from pathlib import Path
 import numpy as np
