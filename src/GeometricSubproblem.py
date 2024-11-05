@@ -315,6 +315,7 @@ class StarSolver:
         return goodIntervals
 
     def internalConstrainedK1Solve(self,gp,seg,boundary,rays,circles,filterFunction=None):
+        #TODO: this should realy also respect, that bad triangles might want to drop onto the boundary, which counts not an entirely bad face...
         baseEval = - (self.faceWeight*gp.numBadTris) - (self.insideSteinerWeight*len(gp.insideSteiners))
 
         if filterFunction is None:
@@ -491,15 +492,16 @@ class StarSolver:
 
                     #this is only considered clean, if the internal call is clean and we drop onto boundary
                     hasClean,sols = self.internalConstrainedK1Solve(gp,seg,[[idx,jdx] for idx,jdx in boundary if not (idx == i and jdx == j)],baseRays + additionalRays,circles,filterFunction)
-                    for _,sol in sols:
+                    for eval,sol in sols:
                         if len(sol) == 1:
                             if not filterFunction(sol[0]):
                                 continue
-                        myEval = baseEval
+                        myEval = eval
                         if boundaryType[bIdx] == "boundary":
-                            myEval += self.boundarySteinerWeight
-                            if hasClean:
-                                myEval += self.cleanWeight
+                            pass
+                            #myEval += #self.boundarySteinerWeight
+                            #if hasClean:
+                            #    myEval += self.cleanWeight
                         elif boundaryType[bIdx] == "halfin":
                             myEval += self.halfInSteinerWeight
                         else:

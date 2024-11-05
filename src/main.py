@@ -54,8 +54,8 @@ def solveEveryInstance(solname="cur_solution.zip"):
     solutions = []
     i = 0
     axs = None
-    debugSeed = 3626013#267012647
-    debugIdx = 125#7#8#88
+    debugSeed = 1#267012647
+    debugIdx = None#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
@@ -192,5 +192,5 @@ def seeded_Multi():
                 print("some error occured")
 
 if __name__=="__main__":
-    seeded_Multi()
-    #solveEveryInstance()
+    #seeded_Multi()
+    solveEveryInstance()
