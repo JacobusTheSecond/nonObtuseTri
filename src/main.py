@@ -40,7 +40,7 @@ def verifyAll(solname="cur_solution.zip"):
         assert not result.errors, "Expect no errors."
 
 def solveEveryInstance(solname="cur_solution.zip"):
-    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.WARNING)
+    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
 
     filepath = Path(__file__)
     solLoc = filepath.parent.parent/"instance_solutions"
@@ -51,9 +51,9 @@ def solveEveryInstance(solname="cur_solution.zip"):
     i = 0
     axs = None
     debugSeed = 0#267012647
-    debugIdx = None#7#8#88
+    debugIdx = 21#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
-    withShow = False#True#True#True#(debugIdx != None) or (debugUID != None)
+    withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         matplotlib.use("TkAgg")
         fig = plt.figure()

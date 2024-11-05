@@ -27,7 +27,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = self.withValidate
+        self.plotWithIds = True#self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -1438,11 +1438,14 @@ class Triangulation:
             else:
                 diff = self.point(self.triangles[a,(aInt+1)%3]) - self.point(self.triangles[a,(aInt+2)%3])
                 orth = Point(FieldNumber(0)-diff.y(),diff.x())
-                if eg.dot(orth,self.point(self.triangles[a,aInt])-self.circumcenter(a)) > eg.zero:
+                if eg.dot(orth,self.point(self.triangles[a,(aInt+1)%3])-self.circumcenter(a)) < eg.zero:
                     orth = orth.scale(FieldNumber(-1))
                 target = self.circumcenter(a)+orth
                 if (inter:=eg.supportingRayIntersectSegment(Segment(self.circumcenter(a),target),Segment(self.point(self.triangles[a,(aInt+1)%3]) , self.point(self.triangles[a,(aInt+2)%3]) ))) is not None:
                     target = inter
+                else:
+                    logging.error(str(self.seed) + " intersection of voronoiray with its boundary was None... that aint good")
+                    assert(False)
                 voronoiSegments.append(Segment(self.circumcenter(a),target))
         return edgeList,voronoiSegments
 
@@ -1518,6 +1521,12 @@ class Triangulation:
                         if not inEdgeList([[triIdx,i],self.triangleMap[triIdx,i,:-1]]):
                             edgeList.append([[triIdx,i],self.triangleMap[triIdx,i,:-1]])
                             segments.append(segment)
+                            p = eg.numericPoint(segment.source())
+                            q = eg.numericPoint(segment.target())
+                            if self.internalaxs != None:
+                                self.internalaxs.plot([p[0],q[0]],[p[1],q[1]],color="black")
+
+
 
         return edgeList, segments
 
@@ -1581,6 +1590,19 @@ class Triangulation:
 
         vEdges, vSegments = self.getVoronoiSegmentsIntersectingCircumCircle(triIdx)
         edges, segments = self.getSegmentsIntersectingCircumCircle(triIdx)
+
+        for vseg in vSegments:
+            p = eg.numericPoint(vseg.source())
+            q = eg.numericPoint(vseg.target())
+            if withPlot:
+                self.internalaxs.plot([p[0],q[0]],[p[1],q[1]],color="green")
+
+
+        for seg in segments:
+            p = eg.numericPoint(seg.source())
+            q = eg.numericPoint(seg.target())
+            if withPlot:
+                self.internalaxs.plot([p[0],q[0]],[p[1],q[1]],color="black")
 
         candidateIntersections = []
         roundable = []
@@ -1675,6 +1697,8 @@ class Triangulation:
                     actualInside = Point(*p)
                     actualDist = d
                     actualRoundable = pisRoundable
+        if actualInside == None:
+            pass
         if withPlot:
             self.internalaxs.scatter([float(actualInside[0])], [float(actualInside[1])], marker="*", color='blue', zorder=1000)
             self.internalaxs.set_aspect('equal')
@@ -1892,7 +1916,9 @@ class QualityImprover:
                         center = eg.altitudePoint(Segment(self.tri.point(self.tri.triangles[centerFindIdx,(bA+1)%3]),self.tri.point(self.tri.triangles[centerFindIdx,(bA+2)%3])),self.tri.point(self.tri.triangles[centerFindIdx,bA]))
                     else:
                         center = self.tri.findComplicatedCenter(centerFindIdx)
-                    assert (center != None)
+                    if (center == None):
+                        center = self.tri.findComplicatedCenter(centerFindIdx)
+                        assert(False)
                     if self.tri.addPoint(center):
                         logging.info("successfully added complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                         lastEdit = "circumcenter"
