@@ -4,10 +4,10 @@
 #SBATCH --output=out/log
 #
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=64
-#SBATCH --partition=lm_long
-#SBATCH --mem=1000G
-#SBATCH --time=7-00:00:00
+#SBATCH --cpus-per-task=96
+#SBATCH --partition=intelsr_medium
+#SBATCH --mem=900G
+#SBATCH --time=1-00:00:00
 
 module load Anaconda3
 
