@@ -1475,7 +1475,7 @@ class Triangulation:
                     edgeList.append(edge)
                     voronoiSegments.append(segment)
                     faceId = edge[0][0]
-                    internal = edge[1][0]
+                    internal = edge[0][1]
                     for i in range(1,3):
                         newInternal = (internal + i)%3
                         if self.triangles[faceId,newInternal] == faceId:
