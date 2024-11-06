@@ -50,10 +50,10 @@ def solveEveryInstance(solname="cur_solution.zip"):
     solutions = []
     i = 0
     axs = None
-    debugSeed = 5#267012647
-    debugIdx = None#7#8#88
+    debugSeed = 404868288#267012647
+    debugIdx = 6#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
-    withShow = False#True#True#True#(debugIdx != None) or (debugUID != None)
+    withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         matplotlib.use("TkAgg")
         fig = plt.figure()

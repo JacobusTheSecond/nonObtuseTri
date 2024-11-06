@@ -1751,6 +1751,7 @@ class QualityImprover:
         self.solver = StarSolver(2,1,1,1.25,2,2)
         if seed != None:
             np.random.seed(seed)
+        self.seed = seed
 
 
     def plotHistory(self,numSteinerHistory,numBadTriHistory,round,specialRounds,ax,twin_ax):
