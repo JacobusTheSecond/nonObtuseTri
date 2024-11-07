@@ -40,7 +40,7 @@ def verifyAll(solname="cur_solution.zip"):
         assert not result.errors, "Expect no errors."
 
 def solveEveryInstance(solname="cur_solution.zip"):
-    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.WARNING)
+    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
 
     filepath = Path(__file__)
     solLoc = filepath.parent.parent/"instance_solutions"
@@ -50,8 +50,10 @@ def solveEveryInstance(solname="cur_solution.zip"):
     solutions = []
     i = 0
     axs = None
-    debugSeed = 0#754181797#267012647
-    debugIdx = None#64#7#8#88
+
+
+    debugSeed = 832141647#754181797#267012647
+    debugIdx = 87#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
@@ -158,6 +160,7 @@ def seeded_Multi():
     np.random.seed(0)
     seeds = [np.random.randint(0,1000000000) for i in range(total)]
     print(seeds)
+    print(seeds[75])
     lock = manager.Lock()
     with Pool(processes=numThreads,initializer=init_pool_processes,initargs=(lock,returner,seeds)) as pool:
         result = pool.map_async(workerFunction,range(total),chunksize=1)

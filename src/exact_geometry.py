@@ -575,6 +575,44 @@ def roundExactOnSegment(seg:Segment,p:Point,acc=100):
     else:
         assert(False)
 
+
+def roundExactBoundor(p:Point,acc=10):
+    result = []
+    result.append(Point(FieldNumber(int(float(p.x()) * acc)), FieldNumber(int(float(p.y()) * acc))).scale(FieldNumber(1)/FieldNumber(acc)))
+    result.append(Point(FieldNumber(int(float(p.x()) * acc)+1), FieldNumber(int(float(p.y()) * acc))).scale(FieldNumber(1)/FieldNumber(acc)))
+    result.append(Point(FieldNumber(int(float(p.x()) * acc)), FieldNumber(int(float(p.y()) * acc)+1)).scale(FieldNumber(1)/FieldNumber(acc)))
+    result.append(Point(FieldNumber(int(float(p.x()) * acc)+1), FieldNumber(int(float(p.y()) * acc)+1)).scale(FieldNumber(1)/FieldNumber(acc)))
+    return result
+
+def roundExactOnSegmentBounder(seg:Segment,p:Point,acc=100):
+    #debugIdx = np.random.randint(1000)
+    #logging.debug("debugIdx:"+str(debugIdx))
+    result = []
+    if seg.squared_length() == zero:
+        return result
+    for p in roundExactBoundor(p,acc):
+        projP = altitudePoint(seg,p)
+        if zero <= getParamOfPointOnSegment(seg,projP) <= FieldNumber(1):
+            result.append(projP)
+    return result
+    #assert(seg.squared_length() > zero)
+    #tx = (p-seg.source()).x()/(seg.target()-seg.source()).x()
+    #ty = (p-seg.source()).y()/(seg.target()-seg.source()).y()
+    #if (seg.target()-seg.source()).x() == zero:
+    #    tx = ty
+    #elif (seg.target()-seg.source()).y() == zero:
+    #    ty = tx
+    #if (tx != ty):
+    #    assert(False)
+    #assert(zero <= tx <= FieldNumber(1))
+    #offset = FieldNumber(1)/FieldNumber(acc)
+    #roundor = roundExactFieldNumber(tx,acc)
+    #if zero <= roundor <= FieldNumber(1):
+    #    result.append( seg.source() + (seg.target()-seg.source()).scale(roundor) )
+    #if zero <= (roundor+offset) <= FieldNumber(1):
+    #    result.append( seg.source() + (seg.target()-seg.source()).scale(roundor+offset))
+    #return result
+
 def _unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
     numpoints = len(points)
     #ran = list(range(len(points)))
