@@ -50,10 +50,10 @@ def solveEveryInstance(solname="cur_solution.zip"):
     solutions = []
     i = 0
     axs = None
-    debugSeed = 404868288#267012647
-    debugIdx = 6#7#8#88
+    debugSeed = 0#754181797#267012647
+    debugIdx = None#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
-    withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
+    withShow = False#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         matplotlib.use("TkAgg")
         fig = plt.figure()
@@ -149,7 +149,7 @@ def init_pool_processes(the_lock,the_returner,the_seeds):
 def seeded_Multi():
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     numThreads = 192
-    total = 384
+    total = 4*numThreads
     filepath = Path(__file__)
     idb = InstanceDatabase(
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
@@ -158,7 +158,7 @@ def seeded_Multi():
     np.random.seed(0)
     seeds = [np.random.randint(0,1000000000) for i in range(total)]
     print(seeds)
-    #print(seeds[22])
+    print(seeds[:28])
     lock = manager.Lock()
     with Pool(processes=numThreads,initializer=init_pool_processes,initargs=(lock,returner,seeds)) as pool:
         result = pool.map_async(workerFunction,range(total),chunksize=1)

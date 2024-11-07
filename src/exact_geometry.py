@@ -236,6 +236,80 @@ def outsideIntersectionsSegmentCircle(m:Point,rsqr:FieldNumber,pq:Segment):
         return [onPoint]
     return [onPoint,mid+mid-onPoint]
 
+def outsideClipSegmentToCircle(m:Point,rsqr:FieldNumber,pq:Segment):
+    if not segmentIntersectsCircle(m,rsqr,pq):
+        return []
+    p = pq.source()
+    q = pq.target()
+    inCircP = inCircle(m,rsqr,p)
+    inCircQ = inCircle(m,rsqr,q)
+    if pq.squared_length() == FieldNumber(0):
+        if inCircP == "on":
+            return [p]
+        elif inCircP == "inside":
+            return [p,p]
+    if inCircP == "inside" and inCircQ == "inside":
+        return [p,q]
+    if inCircP == "outside" and inCircQ == "outside":
+        #mid must be inside or on, otherwise we would have aborted earlier
+        mid = altitudePoint(pq,m)
+        if inCircle(m,rsqr,mid) == "on":
+            return [mid]
+        else:
+            return [binaryIntersection(m,rsqr,Segment(mid,p))[1],binaryIntersection(m,rsqr,Segment(mid,q))[1]]
+    if inCircP == "inside" and inCircQ != "inside":
+        return [p,binaryIntersection(m,rsqr,pq)[1]]
+    if inCircQ == "inside" and inCircP != "inside":
+        return [binaryIntersection(m,rsqr,pq)[1],q]
+    if inCircP == "on" and inCircQ == "on":
+        return [p,q]
+    onPoint = p
+    outPoint = q
+    if inCircP == "outside":
+        onPoint = q
+        outPoint = p
+    mid = altitudePoint(Segment(onPoint,outPoint),m)
+    if FieldNumber(0) >= dot(mid-onPoint,outPoint - onPoint):
+        return [onPoint]
+    return [onPoint,mid+mid-onPoint]
+
+def completeOutsideIntersectionSegmentCircle(m:Point,rsqr:FieldNumber,pq:Segment):
+    if not segmentIntersectsCircle(m,rsqr,pq):
+        return []
+    p = pq.source()
+    q = pq.target()
+    inCircP = inCircle(m,rsqr,p)
+    inCircQ = inCircle(m,rsqr,q)
+    if pq.squared_length() == FieldNumber(0):
+        if inCircP == "on":
+            return [p,p]
+        elif inCircP == "inside":
+            return [p,p]
+        else:
+            return []
+    if inCircP == "inside" and inCircQ == "inside":
+        return [p,q]
+    if inCircP == "outside" and inCircQ == "outside":
+        #mid must be inside or on, otherwise we would have aborted earlier
+        mid = altitudePoint(pq,m)
+        if inCircle(m,rsqr,mid) == "on":
+            return [mid]
+        else:
+            return [binaryIntersection(m,rsqr,Segment(mid,p))[1],binaryIntersection(m,rsqr,Segment(mid,q))[1]]
+    if inCircP == "inside" or inCircQ == "inside":
+        return [binaryIntersection(m,rsqr,pq)[1]]
+    if inCircP == "on" and inCircQ == "on":
+        return [p,q]
+    onPoint = p
+    outPoint = q
+    if inCircP == "outside":
+        onPoint = q
+        outPoint = p
+    mid = altitudePoint(Segment(onPoint,outPoint),m)
+    if FieldNumber(0) >= dot(mid-onPoint,outPoint - onPoint):
+        return [onPoint]
+    return [onPoint,mid+mid-onPoint]
+
 def insideIntersectionsRayCircle(m:Point,rsqr:FieldNumber,pq:Segment):
     if not rayIntersectsCircle(m,rsqr,pq):
         return []
