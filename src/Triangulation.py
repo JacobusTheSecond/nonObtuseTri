@@ -2013,10 +2013,12 @@ class Triangulation:
             d,p = candidatePoints[i]
             rounder = candidateRounders[i]
             if actualDist is None or d > actualDist:
-                rounded = [eg.roundExact(p) if candidateRounders[i] is None else eg.roundExactOnSegment(candidateRounders[i],p)]
+                rounded = eg.roundExactBoundor(p) if candidateRounders[i] is None else eg.roundExactOnSegmentBounder(candidateRounders[i],p)
 
                 addor = None
                 for r in rounded:
+                    if addor is not None:
+                        break
                     if verifyPointDoesntCross(r):
                         addor = r
 
