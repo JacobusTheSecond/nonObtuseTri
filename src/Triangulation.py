@@ -231,8 +231,17 @@ class Triangulation:
 
         self.axs.set_aspect('equal')
         self.axs.title.set_text(name)
+
         plt.draw()
         plt.pause(self.plotTime)
+
+        for vIdx in self.validVertIdxs():
+            _,segs,_ = self.getEdgeClippedConstrainedVoronoiFaceAsSegmentSet(vIdx)
+            for seg in segs:
+                p = eg.numericPoint(seg.source())
+                q = eg.numericPoint(seg.target())
+                self.axs.plot([p[0], q[0]], [p[1], q[1]], color="blue",zorder=1000000)
+                self.axs.scatter([p[0], q[0]], [p[1], q[1]], color="blue",marker="*",s=minSize,zorder=1000000)
 
     def solutionParse(self):
         inneredges = []
@@ -1459,6 +1468,7 @@ class Triangulation:
         hasBeenHandled = []
         edgeList = []
         voronoiSegments = []
+        edgeRounders = []
 
         def inEdgeList(edge):
             for e in edgeList:
@@ -1470,13 +1480,14 @@ class Triangulation:
             voronoiFace = voronoiFaceStack.pop()
             hasBeenHandled.append(voronoiFace)
 
-            faceEdgeList,faceEdgeSegments = self.getVoronoiFacetEdgeSet(voronoiFace)
-            for edge,segment in zip(faceEdgeList,faceEdgeSegments):
+            faceEdgeList,faceEdgeSegments,faceEdgeRounders = self.getClippedConstrainedVoronoiFaceAsSegmentSet(voronoiFace,triIdx)
+            for edge,segment,rounder in zip(faceEdgeList,faceEdgeSegments,faceEdgeRounders):
                 if inEdgeList(edge):
                     continue
                 if eg.segmentIntersectsCircle(cc,cr,segment):
                     edgeList.append(edge)
                     voronoiSegments.append(segment)
+                    edgeRounders.append(rounder)
                     faceId = edge[0][0]
                     internal = edge[0][1]
                     for i in range(1,3):
@@ -1486,7 +1497,7 @@ class Triangulation:
                         newVoronoiFace = self.triangles[faceId,newInternal]
                         if not (newVoronoiFace in hasBeenHandled or newVoronoiFace in voronoiFaceStack):
                             voronoiFaceStack.append(newVoronoiFace)
-        return edgeList,voronoiSegments
+        return edgeList,voronoiSegments,edgeRounders
 
     def getSegmentsIntersectingCircumCircle(self,triIdx):
         cc = self.circumcenter(triIdx)
@@ -1523,13 +1534,303 @@ class Triangulation:
                             segments.append(segment)
                             p = eg.numericPoint(segment.source())
                             q = eg.numericPoint(segment.target())
-                            if self.internalaxs != None:
-                                self.internalaxs.plot([p[0],q[0]],[p[1],q[1]],color="black")
+                            #if self.internalaxs != None:
+                            #    self.internalaxs.plot([p[0],q[0]],[p[1],q[1]],color="black")
 
 
 
         return edgeList, segments
 
+    def getUnclippedConstrainedVoronoiFace(self,vIdx):
+        #get voronoi edges correctly oriented
+        voronoiEdgeSet = []
+        for triIdx,internal in self.vertexMap[vIdx]:
+            for i in range(1,3):
+                actualInternal = (internal + i)%3
+                if triIdx < self.triangleMap[triIdx,actualInternal,0]:
+                    voronoiEdgeSet.append([[triIdx,actualInternal],self.triangleMap[triIdx,actualInternal,:-1]])
+
+        #now orient the edges properly...
+        voronoiFace = [voronoiEdgeSet[0]]
+        voronoiEdgeSet = voronoiEdgeSet[1:]
+        curFace = voronoiFace[0][1][0]
+        while len(voronoiEdgeSet) > 0:
+            for i in range(len(voronoiEdgeSet)):
+                vEdge = voronoiEdgeSet[i]
+                if vEdge[0][0] == curFace:
+                    curFace = vEdge[1][0]
+                    voronoiFace.append(vEdge)
+                    voronoiEdgeSet.pop(i)
+                    break
+                elif vEdge[1][0] == curFace:
+                    curFace = vEdge[0][0]
+                    voronoiFace.append(vEdge)
+                    voronoiEdgeSet.pop(i)
+                    break
+                else:
+                    continue
+        #now segment into subfacets
+        constrainedSubfacets = []
+        while len(voronoiFace) > 0:
+            nextEdge = voronoiFace.pop(0)
+            if len(constrainedSubfacets) == 0:
+                constrainedSubfacets.append([nextEdge])
+            else:
+                constrainedSubfacets[-1] =constrainedSubfacets[-1] + [nextEdge]
+
+            if self.triangleMap[nextEdge[0][0],nextEdge[0][1],2] != noneEdge:
+                constrainedSubfacets.append([nextEdge])
+        if len(constrainedSubfacets) > 1:
+            firstSubfacet = constrainedSubfacets[0]
+            constrainedSubfacets = constrainedSubfacets[1:]
+            constrainedSubfacets[-1] = constrainedSubfacets[-1] + firstSubfacet
+
+        for i in reversed(range(len(constrainedSubfacets))):
+            conFacet = constrainedSubfacets[i]
+            if len(conFacet) == 2:
+                if outerFace == conFacet[0][0][0] or outerFace == conFacet[0][1][0]:
+                    if min(conFacet[0][0][0],conFacet[0][1][0]) != min(conFacet[1][0][0],conFacet[1][1][0]):
+                        constrainedSubfacets.pop(i)
+
+        #now there is no subfacet for outside. We may still have a corner vertex with a single adjoining face... this will be weird. maybe it just works out
+
+        #these are not yet clipped to any segment. maybe include this functionality...
+        edges,segments,roundingObjects = [],[],[]
+        for subfacet in constrainedSubfacets:
+            firstEdge = subfacet[0]
+
+            def traverseFacet(first,last):
+                sfedges,sfsegments,sfrounders = [],[],[]
+                if first == last:
+                    assert(False)
+                step = 1 if last > first else -1
+
+                es = self.point(self.triangles[subfacet[first][0][0], (subfacet[first][0][1] + 1) % 3])
+                et = self.point(self.triangles[subfacet[first][0][0], (subfacet[first][0][1] + 2) % 3])
+                curP = (es + et).scale(eg.onehalf)
+                curF, curInt = subfacet[first][0]
+                if curF != subfacet[first+step][0][0] and curF != subfacet[first+step][1][0]:
+                    curF, curInt = subfacet[first][1]
+                oldEdge = subfacet[first]
+                sfrounders.append(Segment(es,et))
+
+                les = self.point(self.triangles[subfacet[last][0][0], (subfacet[last][0][1] + 1) % 3])
+                let = self.point(self.triangles[subfacet[last][0][0], (subfacet[last][0][1] + 2) % 3])
+                lastEdge = Segment(les, let)
+
+                for curEdgeIdx in range(first+step, last+step, step):
+                    curEdge = subfacet[curEdgeIdx]
+
+                    nextF, nextInt = None, None
+                    if curF == curEdge[0][0]:
+                        nextF, nextInt = curEdge[1]
+                    else:
+                        nextF, nextInt = curEdge[0]
+
+                    nextP = self.circumcenter(curF)
+                    nextSegment = Segment(curP, nextP)
+
+                    # this ends everything
+                    if (inter := eg.innerIntersect(lastEdge.source(), lastEdge.target(), nextSegment.source(),
+                                                   nextSegment.target())) is not None:
+                        sfedges.append(oldEdge)
+                        sfsegments.append(Segment(curP, inter))
+                        sfrounders.append(lastEdge)
+
+                        break
+
+                    elif nextF == outerFace:
+                        sfedges.append(oldEdge)
+                        sfsegments.append(nextSegment)
+                        sfrounders.append(None)
+                        es = self.point(self.triangles[curEdge[0][0], (curEdge[0][1] + 1) % 3])
+                        et = self.point(self.triangles[curEdge[0][0], (curEdge[0][1] + 2) % 3])
+                        nextP = (es + et).scale(eg.onehalf)
+                        sfedges.append(nextEdge)
+                        sfsegments.append(Segment(nextSegment.target(), nextP))
+                        sfrounders.append(Segment(es,et))
+                        break
+                    elif curEdgeIdx == last:
+                        sfedges.append(oldEdge)
+                        sfsegments.append(nextSegment)
+                        sfrounders.append(None)
+                        es = self.point(self.triangles[nextF, (nextInt + 1) % 3])
+                        et = self.point(self.triangles[nextF, (nextInt + 2) % 3])
+                        nextP = (es + et).scale(eg.onehalf)
+                        sfedges.append(nextEdge)
+                        sfsegments.append(Segment(nextSegment.target(), nextP))
+                        sfrounders.append(Segment(es,et))
+                        break
+
+
+                    else:
+                        sfedges.append(oldEdge)
+                        sfsegments.append(nextSegment)
+                        sfrounders.append(None)
+                        curP = nextP
+                        oldEdge = curEdge
+                        curF = nextF
+                        curInt = nextInt
+                return sfedges,sfsegments,[ [sfrounders[i],sfrounders[i+1]] for i in range(len(sfrounders)-1) ]
+
+
+
+            if self.triangleMap[firstEdge[0][0],firstEdge[0][1],2] == noneEdge:
+                #unconstrained point, and we just return the normal voronoi region. We still need to clip it to the segment set later on however...
+                sfedges = subfacet
+                sfsegments = []
+                sfRounders = []
+                for sfedge in sfedges:
+                    sfsegments.append(Segment(self.circumcenter(sfedge[0][0]),self.circumcenter(sfedge[1][0])))
+                    #roundingObjets
+                    sfRounders.append([None,None])
+                edges.append(sfedges)
+                segments.append(sfsegments)
+                roundingObjects.append(sfRounders)
+            else:
+                closestIdx = 0
+                closestPoint = None
+                dist = None
+                for i in range(1,3):
+                    if self.triangles[subfacet[0][0][0],(subfacet[0][0][1]+i)%3]== vIdx:
+                        continue
+                    closestPoint = self.point(self.triangles[subfacet[0][0][0],(subfacet[0][0][1]+i)%3])
+                    dist= eg.distsq(self.point(vIdx),closestPoint)
+
+                for i in range(len(subfacet)):
+                    for j in range(1, 3):
+                        if self.triangles[subfacet[i][0][0], (subfacet[i][0][1] + j) % 3] == vIdx:
+                            continue
+                        p = self.point(self.triangles[subfacet[i][0][0],(subfacet[i][0][1]+j)%3])
+                        if eg.distsq(self.point(vIdx),p) < dist:
+                            closestIdx = i
+                            closestPoint = p
+                            dist = eg.distsq(self.point(vIdx),closestPoint)
+
+                #now we step forward and backward and build up sfedges and sgsegments
+                if closestIdx == 0:
+                    sfedges,sfsegments,sfRounders = traverseFacet(0,len(subfacet)-1)
+
+                    edges.append(sfedges)
+                    segments.append(sfsegments)
+                    roundingObjects.append(sfRounders)
+
+                elif closestIdx == len(subfacet)-1:
+
+                    sfedges, sfsegments,sfRounders = traverseFacet(len(subfacet) - 1,0)
+
+                    edges.append(sfedges)
+                    segments.append(sfsegments)
+                    roundingObjects.append(sfRounders)
+                else:
+
+                    forwardsfEdges,forwardsfSegments, forwardsfRounders = traverseFacet(closestIdx,len(subfacet)-1)
+
+                    backwardsfEdges,backwardsfSegments, backwardsfRounders = traverseFacet(closestIdx,0)
+
+                    edges.append(backwardsfEdges[::-1] + forwardsfEdges)
+                    segments.append(backwardsfSegments[::-1] + forwardsfSegments)
+                    roundingObjects.append(backwardsfRounders[::-1] + forwardsfRounders)
+        return edges, segments, roundingObjects
+
+    def getEdgeClippedConstrainedVoronoiFaceAsSegmentSet(self,vIdx):
+
+
+        #first get the unclipped voronoiFace
+        edges,segments,rounders = self.getUnclippedConstrainedVoronoiFace(vIdx)
+
+        def closestEdge(v,p,segments):
+            qSeg = Segment(v,p)
+            closest = None
+            dist = None
+            for i in range(len(segments)):
+                seg = segments[i]
+                if (inter := eg.innerIntersect(qSeg.source(),qSeg.target(),seg.source(),seg.target())) is not None:
+                    param = eg.getParamOfPointOnSegment(qSeg, inter)
+                    if dist == None or param < dist:
+                        closest = i
+                        dist = param
+            return closest
+
+        edgeClippedSegs = []
+        edgeClippedEdges = []
+        edgeClippedRounders = []
+
+        for subfacet,facetEdges,rounder in zip(segments,edges,rounders):
+
+            #get the set of all edges that we might be interested in, for intersection
+            segIds = []
+            boundingSegs = []
+            for edge in facetEdges:
+                for face,_ in edge:
+                    if face == outerFace:
+                        continue
+                    faceEdges,faceSegments = self.getSegmentsIntersectingCircumCircle(face)
+                    for faceEdge,faceSegment in zip(faceEdges,faceSegments):
+                        segId = self.triangleMap[faceEdge[0][0],faceEdge[0][1],2]
+                        if vIdx in self.segments[segId]:
+                            continue
+                        if segId in segIds:
+                            continue
+                        segIds.append(segId)
+                        boundingSegs.append(faceSegment)
+
+            v = self.point(vIdx)
+            for segment,edge,r in zip(subfacet,facetEdges,rounder):
+
+                cS = closestEdge(v,segment.source(),boundingSegs)
+                cT = closestEdge(v,segment.target(),boundingSegs)
+
+                if cS == None and cT == None:
+                    edgeClippedSegs.append(segment)
+                    edgeClippedEdges.append(edge)
+                    edgeClippedRounders.append(r)
+                if cS == None and cT != None:
+                    edgeClippedSegs.append(Segment(segment.source(),eg.innerIntersect(segment.source(),segment.target(),boundingSegs[cT].source(),boundingSegs[cT].target())))
+                    edgeClippedEdges.append(edge)
+                    edgeClippedRounders.append([r[0],boundingSegs[cT]])
+                if cS != None and cT == None:
+                    edgeClippedSegs.append(Segment(eg.innerIntersect(segment.source(),segment.target(),boundingSegs[cS].source(),boundingSegs[cS].target()),segment.target()))
+                    edgeClippedEdges.append(edge)
+                    edgeClippedRounders.append([boundingSegs[cS],r[1]])
+                if cS != None and cT != None and cS != cT:
+                    edgeClippedSegs.append(Segment(eg.innerIntersect(segment.source(),segment.target(),boundingSegs[cS].source(),boundingSegs[cS].target()),eg.innerIntersect(segment.source(),segment.target(),boundingSegs[cT].source(),boundingSegs[cT].target())))
+                    edgeClippedEdges.append(edge)
+                    edgeClippedRounders.append([boundingSegs[cS],boundingSegs[cT]])
+                if cS != None and cT != None and cS == cT:
+                    logging.info("intersting case! we dont do anything tho, as clipping is correct this way")
+
+        return edgeClippedEdges,edgeClippedSegs, edgeClippedRounders
+
+    def getClippedConstrainedVoronoiFaceAsSegmentSet(self,vIdx,circumIdx):
+        cc = self.circumcenter(circumIdx)
+        cr = self.circumRadiiSqr[circumIdx]
+
+        edgeClippedEdges,edgeClippedSegs,edgeClippedRounders = self.getEdgeClippedConstrainedVoronoiFaceAsSegmentSet(vIdx)
+
+        #lastly clip the edges to the circle
+        resultSegs = []
+        resultEdges = []
+        resultRounders = []
+        for edge,seg,rounder in zip(edgeClippedEdges,edgeClippedSegs,edgeClippedRounders):
+            if eg.segmentIntersectsCircle(cc,cr,seg):
+                clip = eg.outsideClipSegmentToCircle(cc,cr,seg)
+                if len(clip) == 0:
+                    pass
+                    eg.outsideClipSegmentToCircle(cc, cr, seg)
+                    logging.error("WTF??")
+                    assert(False)
+                if len(clip) == 1:
+                    resultSegs.append(Segment(clip[0],clip[0]))
+                    resultEdges.append(edge)
+                    resultRounders.append([rounder[0] if eg.inCircle(cc,cr,seg.source()) != "outside" else None,rounder[1] if eg.inCircle(cc,cr,seg.target()) != "outside" else None])
+
+                if len(clip) == 2:
+                    resultSegs.append(Segment(*clip))
+                    resultEdges.append(edge)
+                    resultRounders.append([rounder[0] if eg.inCircle(cc,cr,seg.source()) != "outside" else None,rounder[1] if eg.inCircle(cc,cr,seg.target()) != "outside" else None])
+
+        return resultEdges,resultSegs,resultRounders
 
 
     def findComplicatedCenter(self, triIdx):
@@ -1588,8 +1889,23 @@ class Triangulation:
 
         boundingSegments = [Segment(base,other),Segment(base,base+orth),Segment(other,other+orth)]
 
-        vEdges, vSegments = self.getVoronoiSegmentsIntersectingCircumCircle(triIdx)
+        #vEdges, vSegments = self.getUnclippedConstrainedVoronoiFace()
         edges, segments = self.getSegmentsIntersectingCircumCircle(triIdx)
+        vEdges, vSegments, vRounders = self.getVoronoiSegmentsIntersectingCircumCircle(triIdx)
+
+        #for a,_ in vEdges:
+        #    tri,internal = a
+        #    for i in range(1,3):#
+
+        #        testSegments = self.getClippedConstrainedVoronoiFaceAsSegmentSet(self.triangles[tri,(internal+i)%3],triIdx)
+
+        #        for vseg in testSegments:
+        #            p = eg.numericPoint(vseg.source())
+        #            q = eg.numericPoint(vseg.target())
+        #            if withPlot:
+        #                self.internalaxs.plot([p[0], q[0]], [p[1], q[1]], color="green")
+        #                self.internalaxs.scatter([p[0], q[0]], [p[1], q[1]], color="green")
+
 
         for vseg in vSegments:
             p = eg.numericPoint(vseg.source())
@@ -1605,23 +1921,15 @@ class Triangulation:
                 self.internalaxs.plot([p[0],q[0]],[p[1],q[1]],color="black")
 
         candidateIntersections = []
-        roundable = []
-        for vedge,vseg in zip(vEdges,vSegments):
+        rounderObjects = []
+        for vedge,vseg,rounder in zip(vEdges,vSegments,vRounders):
             closestPointId = self.triangles[vedge[0][0],(vedge[0][1]+1)%3]
             closestPoint = self.point(closestPointId)
 
-            if vedge[1][0] == outerFace:
-                candidateIntersections.append([eg.distsq(closestPoint, vseg.source()), vseg.source()])
-                roundable.append(True)
-                candidateIntersections.append([eg.distsq(closestPoint, vseg.target()), vseg.target()])
-                roundable.append(False)
-
-                #candidateIntersections.append([eg.distsq(closestPoint, seg.source()), seg.source()])
-            else:
-                candidateIntersections.append([eg.distsq(closestPoint, vseg.source()), vseg.source()])
-                roundable.append(True)
-                candidateIntersections.append([eg.distsq(closestPoint, vseg.target()), vseg.target()])
-                roundable.append(True)
+            candidateIntersections.append([eg.distsq(closestPoint, vseg.source()), vseg.source()])
+            rounderObjects.append(rounder[0])
+            candidateIntersections.append([eg.distsq(closestPoint, vseg.target()), vseg.target()])
+            rounderObjects.append(rounder[1])
 
 
             #first intersect with boundingbox
@@ -1629,7 +1937,7 @@ class Triangulation:
                 inter = eg.innerIntersect(vseg.source(),vseg.target(),bbseg.source(),bbseg.target())
                 if inter != None:
                     candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
-                    roundable.append(True)
+                    rounderObjects.append(bbseg)
                     if withPlot:
                         self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
 
@@ -1639,7 +1947,7 @@ class Triangulation:
                 if inter != None:
                     inter = eg.roundExactOnSegment(encseg,inter)
                     candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
-                    roundable.append(False)
+                    rounderObjects.append(encseg)
                     if withPlot:
                         self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
 
@@ -1647,17 +1955,18 @@ class Triangulation:
             inters = eg.insideIntersectionsSegmentCircle(myCC,myCRsq,vseg)
             for inter in inters:
                 candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
-                roundable.append(True)
+                #probably not best, but whatever
+                rounderObjects.append(None)
                 if withPlot:
                     self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
                     pass
 
 
         candidatePoints = []
-        roundablePoint = []
+        candidateRounders = []
         for i in range(len(candidateIntersections)):
             d, p = candidateIntersections[i]
-            pisRoundable = roundable[i]
+            candidateRounder = rounderObjects[i]
             if withPlot:
                 self.internalaxs.scatter([float(p[0])], [float(p[1])], marker="*", color='yellow', zorder=101)
             # outside
@@ -1673,9 +1982,21 @@ class Triangulation:
                 continue
 
             candidatePoints.append([d, p])
-            roundablePoint.append(pisRoundable)
+            candidateRounders.append(candidateRounder)
             if withPlot:
                 self.internalaxs.scatter([float(p[0])], [float(p[1])], marker="*", color='red', zorder=1000)
+
+        def verifyPointDoesntCross(p):
+            for i in range(3):
+                triP = self.point(tri[i])
+                for seg in self.segments:
+                    if tri[i] in seg:
+                        continue
+                    segSource = self.point(seg[0])
+                    segTarget = self.point(seg[1])
+                    if (inter := eg.innerIntersect(segSource, segTarget, triP, p)) is not None:
+                        return False
+            return True
 
         # now all candidatePoints are guaranteed to lie inside the region. we need to check finally, if the three rays from base, other and far to the point intersect some segment
         actualInside = None
@@ -1683,46 +2004,22 @@ class Triangulation:
         actualRoundable = None
         for i in range(len(candidatePoints)):
             d,p = candidatePoints[i]
-            pisRoundable = roundablePoint[i]
-            intersects = False
-            for i in range(3):
-                triP = self.point(tri[i])
-                for seg in self.segments:
-                    segSource = self.point(seg[0])
-                    segTarget = self.point(seg[1])
-                    if (inter := eg.innerIntersect(segSource, segTarget, triP, p)) is not None:
-                        intersects = True
-            if not intersects:
-                if actualDist is None or d > actualDist:
-                    actualInside = Point(*p)
+            rounder = candidateRounders[i]
+            if actualDist is None or d > actualDist:
+                rounded = [eg.roundExact(p) if candidateRounders[i] is None else eg.roundExactOnSegment(candidateRounders[i],p)]
+
+                addor = None
+                for r in rounded:
+                    if verifyPointDoesntCross(r):
+                        addor = r
+
+                if addor is None:
+                    if verifyPointDoesntCross(p):
+                        addor = p
+
+                if addor is not None:
+                    actualInside = addor
                     actualDist = d
-                    actualRoundable = pisRoundable
-        if actualInside == None:
-            pass
-        if withPlot:
-            self.internalaxs.scatter([float(actualInside[0])], [float(actualInside[1])], marker="*", color='blue', zorder=1000)
-            self.internalaxs.set_aspect('equal')
-        if actualRoundable:
-            acc = 10
-            offset = FieldNumber(1)/FieldNumber(acc)
-            for off in [Point(FieldNumber(0),FieldNumber(0)),Point(offset,FieldNumber(0)),Point(FieldNumber(0)-offset,FieldNumber(0)),Point(FieldNumber(0),offset),Point(FieldNumber(0),FieldNumber(0)-offset)]:
-                newP = eg.roundExact(actualInside + off,acc)
-                # outside
-                if eg.distsq(myCC, newP) > self.circumRadiiSqr[triIdx]:
-                    continue
-
-                # outside slab
-                if eg.dot(other - base, newP - base) < FieldNumber(0):
-                    continue
-                if eg.dot(base - other, newP - other) < FieldNumber(0):
-                    continue
-                if eg.dot(orth, newP - base) < FieldNumber(0):
-                    continue
-
-                logging.debug("rounded point!")
-                actualInside = newP
-                break
-
         return actualInside
 
     def combinatorialDepth(self):

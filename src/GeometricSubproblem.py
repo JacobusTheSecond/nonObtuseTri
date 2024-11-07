@@ -454,6 +454,8 @@ class StarSolver:
                     #myEval += self.faceWeight
                     if boundaryType[bIdx] == "boundary":
                         myEval += self.boundarySteinerWeight + (1 / 32) #slightly increase weight to make it not be better than just solving the face, improving stability
+                    #elif boundaryType[bIdx] == "halfin":
+                    #    myEval += self.faceWeight + (1/32) #discourage constrained segments as the only bad triangles
                     else:
                         myEval += self.faceWeight
                 for _,ci in pointList:
