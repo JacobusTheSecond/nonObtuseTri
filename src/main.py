@@ -53,7 +53,7 @@ def solveEveryInstance(solname="cur_solution.zip"):
     debugSeed = 0#754181797#267012647
     debugIdx = None#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
-    withShow = False#True#True#True#(debugIdx != None) or (debugUID != None)
+    withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         matplotlib.use("TkAgg")
         fig = plt.figure()
@@ -158,7 +158,6 @@ def seeded_Multi():
     np.random.seed(0)
     seeds = [np.random.randint(0,1000000000) for i in range(total)]
     print(seeds)
-    print(seeds[:28])
     lock = manager.Lock()
     with Pool(processes=numThreads,initializer=init_pool_processes,initargs=(lock,returner,seeds)) as pool:
         result = pool.map_async(workerFunction,range(total),chunksize=1)
