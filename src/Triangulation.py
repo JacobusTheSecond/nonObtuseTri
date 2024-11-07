@@ -232,16 +232,16 @@ class Triangulation:
         self.axs.set_aspect('equal')
         self.axs.title.set_text(name)
 
+        #for vIdx in self.validVertIdxs():
+        #    _,segs,_ = self.getEdgeClippedConstrainedVoronoiFaceAsSegmentSet(vIdx)
+        #    for seg in segs:
+        #        p = eg.numericPoint(seg.source())
+        #        q = eg.numericPoint(seg.target())
+        #        self.axs.plot([p[0], q[0]], [p[1], q[1]], color="blue",zorder=1000000)
+        #        self.axs.scatter([p[0], q[0]], [p[1], q[1]], color="blue",marker="*",s=minSize,zorder=1000000)
+
         plt.draw()
         plt.pause(self.plotTime)
-
-        for vIdx in self.validVertIdxs():
-            _,segs,_ = self.getEdgeClippedConstrainedVoronoiFaceAsSegmentSet(vIdx)
-            for seg in segs:
-                p = eg.numericPoint(seg.source())
-                q = eg.numericPoint(seg.target())
-                self.axs.plot([p[0], q[0]], [p[1], q[1]], color="blue",zorder=1000000)
-                self.axs.scatter([p[0], q[0]], [p[1], q[1]], color="blue",marker="*",s=minSize,zorder=1000000)
 
     def solutionParse(self):
         inneredges = []
@@ -1646,7 +1646,7 @@ class Triangulation:
                         es = self.point(self.triangles[curEdge[0][0], (curEdge[0][1] + 1) % 3])
                         et = self.point(self.triangles[curEdge[0][0], (curEdge[0][1] + 2) % 3])
                         nextP = (es + et).scale(eg.onehalf)
-                        sfedges.append(nextEdge)
+                        sfedges.append(curEdge)
                         sfsegments.append(Segment(nextSegment.target(), nextP))
                         sfrounders.append(Segment(es,et))
                         break
@@ -1657,7 +1657,7 @@ class Triangulation:
                         es = self.point(self.triangles[nextF, (nextInt + 1) % 3])
                         et = self.point(self.triangles[nextF, (nextInt + 2) % 3])
                         nextP = (es + et).scale(eg.onehalf)
-                        sfedges.append(nextEdge)
+                        sfedges.append(curEdge)
                         sfsegments.append(Segment(nextSegment.target(), nextP))
                         sfrounders.append(Segment(es,et))
                         break
@@ -1960,7 +1960,6 @@ class Triangulation:
                 if withPlot:
                     self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
                     pass
-
 
         candidatePoints = []
         candidateRounders = []
