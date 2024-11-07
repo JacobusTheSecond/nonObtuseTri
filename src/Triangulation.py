@@ -27,7 +27,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = True#self.withValidate
+        self.plotWithIds = self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -1476,13 +1476,21 @@ class Triangulation:
                     return True
             return False
 
+        def inSegmentList(seg):
+            for vseg in voronoiSegments:
+                if vseg.source() == seg.source() and vseg.target() == seg.target():
+                    return True
+                elif vseg.source() == seg.target() and vseg.target() == seg.source():
+                    return True
+            return False
+
         while len(voronoiFaceStack) > 0:
             voronoiFace = voronoiFaceStack.pop()
             hasBeenHandled.append(voronoiFace)
 
             faceEdgeList,faceEdgeSegments,faceEdgeRounders = self.getClippedConstrainedVoronoiFaceAsSegmentSet(voronoiFace,triIdx)
             for edge,segment,rounder in zip(faceEdgeList,faceEdgeSegments,faceEdgeRounders):
-                if inEdgeList(edge):
+                if inSegmentList(segment):
                     continue
                 if eg.segmentIntersectsCircle(cc,cr,segment):
                     edgeList.append(edge)
