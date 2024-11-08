@@ -128,6 +128,9 @@ def workerFunction(index):
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
     i = 0
     for instance in idb:
+        lock.acquire()
+        times[index] = time.time()
+        lock.release()
         tr = Triangulation(instance)
         qi = QualityImprover(tr,seed=seeds[index])
         sol = qi.improve()
@@ -141,11 +144,16 @@ def workerFunction(index):
             print(progress)
             print("QUALITY:")
             print(np.array(best))
+            print("TIMES:")
+            print(np.array(np.full(np.array(times).shape ,time.time()) - np.array(times),dtype=int)//60)
         lock.release()
         i += 1
+    lock.acquire()
+    times[index] = -1
+    lock.release()
 
 
-def init_pool_processes(the_lock,the_returner,the_seeds,the_best):
+def init_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times):
     global lock
     lock = the_lock
     global returner
@@ -154,6 +162,8 @@ def init_pool_processes(the_lock,the_returner,the_seeds,the_best):
     seeds = the_seeds
     global best
     best = the_best
+    global times
+    times = the_times
 
 
 def seeded_Multi():
@@ -167,12 +177,13 @@ def seeded_Multi():
     manager = multiprocessing.Manager()
     returner = manager.list([manager.list() for i in range(total)])
     best = manager.list([-1 for _ in idb])
+    times = manager.list([-1 for _ in range(total)])
     np.random.seed(0)
     seeds = [np.random.randint(0,1000000000) for i in range(total)]
     print(seeds)
     #print(seeds[98])
     lock = manager.Lock()
-    with Pool(initializer=init_pool_processes,initargs=(lock,returner,seeds,best)) as pool:
+    with Pool(initializer=init_pool_processes,initargs=(lock,returner,seeds,best,times)) as pool:
         result = pool.map_async(workerFunction,range(total),chunksize=1)
 
         result.wait()
