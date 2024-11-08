@@ -8,7 +8,7 @@ from cgshop2025_pyutils.geometry import Point, Segment, FieldNumber, intersectio
 
 class GeometricSubproblem:
     def __init__(self, vIdxs, triIdxs, boundary, exactPoints, numericPoints, innerCons, boundaryCons, boundaryType,
-                 steinercutoff, numBadTris, axs=None):
+                 steinercutoff, numBadTris,numBoundaryDroppers, axs=None):
         # some housekeeping to have some handle on what to delete later
 
         # lets make this better
@@ -17,6 +17,7 @@ class GeometricSubproblem:
         self.exactVerts = exactPoints
         self.numericVerts = numericPoints
         self.numBadTris = numBadTris
+        self.numBoundaryDroppers = numBoundaryDroppers
 
         self.localMap = np.array(list(vIdxs) + list(boundary))
         self.isSteiner = [False if v < steinercutoff else True for v in self.localMap]
@@ -135,6 +136,8 @@ class GeometricSubproblem:
         self.eval = None
         self.sol = None
 
+        self.baseEval = None
+
         # self.plotMe()
 
     def plotMe(self):
@@ -222,7 +225,7 @@ class StarSolver:
         if len(constraints) > 1:
             return hasClean,solutions
 
-        baseEval = - (self.faceWeight*gp.numBadTris) - (self.insideSteinerWeight*len(gp.insideSteiners))
+        baseEval = gp.baseEval
         eligibleIdxs = range(len(self.points)) if len(constraints) == 0 else constraints[0]
         for pIdx in eligibleIdxs:
             p = self.points[pIdx]
@@ -315,7 +318,7 @@ class StarSolver:
 
     def internalConstrainedK1Solve(self,gp,seg,boundary,rays,circles,filterFunction=None):
         #TODO: this should realy also respect, that bad triangles might want to drop onto the boundary, which counts not an entirely bad face...
-        baseEval = - (self.faceWeight*gp.numBadTris) - (self.insideSteinerWeight*len(gp.insideSteiners))
+        baseEval = gp.baseEval
 
         if filterFunction is None:
             filterFunction = lambda x: True
@@ -365,7 +368,7 @@ class StarSolver:
         if filterFunction is None:
             filterFunction = lambda x : True
 
-        baseEval = - (self.faceWeight*gp.numBadTris) - (self.insideSteinerWeight*len(gp.insideSteiners))
+        baseEval = gp.baseEval#- (self.faceWeight*gp.numBadTris) - (self.insideSteinerWeight*len(gp.insideSteiners))
 
         if len(constraints) == 1:
 
@@ -690,6 +693,9 @@ class StarSolver:
 
         if len(gp.insideVertices)>0:
             return 0,None
+
+
+        gp.baseEval = - (self.faceWeight*gp.numBadTris) - (self.boundarySteinerWeight * gp.numBoundaryDroppers) - (self.insideSteinerWeight*len(gp.insideSteiners))
 
         #gp.plotMe()
 

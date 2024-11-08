@@ -27,7 +27,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = self.withValidate
+        self.plotWithIds = True#self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -797,6 +797,11 @@ class Triangulation:
 
     def addPoint(self, p: Point):
 
+        #representation quality guard
+        if len(p.x().exact()) > 5000 or len(p.y().exact()) > 5000:
+            logging.error(str(self.seed) + " DANGEROUS LEVELS OF REPRESENTATION QUALITY FOR NEW POINT!!!")
+            return False
+
         # first figure out, in which triangle the point lies. If inside, split into three, if on, split adjacent
         # faces into two each
         hitTriIdxs = []
@@ -1275,12 +1280,19 @@ class Triangulation:
                         moveInside.append(link[(i + 1) % len(link)])
             link = np.delete(link, deleteList)
         vIdxs = np.hstack((vIdxs, np.array(moveInside, dtype=int)))
+        numBoundaryDroppers=0
+        for face in insideFaces:
+            if self.badTris[face]:
+                i = eg.badAngle(self.point(self.triangles[face,0]),self.point(self.triangles[face,1]),self.point(self.triangles[face,2]))
+                if self.triangleMap[face,i,0] == outerFace:
+                    numBoundaryDroppers += 1
+                    numBad -= 1
 
         if len(link) == len(list(set(link))):
             return GeometricSubproblem(vIdxs, insideFaces, link, self.exactVerts[list(vIdxs) + list(link)],
                                    self.numericVerts[list(vIdxs) + list(link)], self.segments[insideConstraints],
                                    self.segments[boundaryConstraints], boundaryConstraintTypes, self.instanceSize,
-                                   numBad, self.gpaxs)
+                                   numBad,numBoundaryDroppers, self.gpaxs)
         else:
             logging.debug("Enclosement with seed "+str(vIdxs)+" produced non-trivial homotopytype...")
             return None
@@ -1291,9 +1303,18 @@ class Triangulation:
         for _, _, segmentId in self.triangleMap[triIdx]:
             if segmentId != noneEdge:
                 segmentIds.append(segmentId)
+        insideFaces = [triIdx]
+        numBad = 1 if self.isBad(triIdx) else 0
+        numBoundaryDroppers=0
+        for face in insideFaces:
+            if self.badTris[face]:
+                i = eg.badAngle(self.point(self.triangles[face,0]),self.point(self.triangles[face,1]),self.point(self.triangles[face,2]))
+                if self.triangleMap[face,i,0] == outerFace:
+                    numBoundaryDroppers += 1
+                    numBad -= 1
         return GeometricSubproblem([], [triIdx], tri, self.exactVerts[tri], self.numericVerts[tri], [],
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
-                                   1 if self.isBad(triIdx) else 0, self.gpaxs)
+                                   numBad,numBoundaryDroppers, self.gpaxs)
 
     def removePoint(self,vIdx):
         #safely unlinks
@@ -1847,6 +1868,7 @@ class Triangulation:
 
         if withPlot:
             self.internalaxs.clear()
+            self.internalaxs.set_aspect("equal")
         self.validateCircumcenters()
         assert (self.badTris[triIdx])
         tri = self.triangles[triIdx]
@@ -2233,15 +2255,15 @@ class QualityImprover:
                     else:
                         logging.error(str(self.seed) + ": failed to add complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                 elif convergenceDetectorDict[centerFindIdx] < 20:
+                    logging.error(str(self.seed) + ": reached convergence threat "+convergenceDetectorDict[centerFindIdx])
                     center = Point(*self.tri.circumCenters[centerFindIdx])
                     assert (center != None)
                     if self.tri.addPoint(center):
                         logging.info("successfully added circumcenter of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
-                        lastEdit = "circumcenter"
-                        added = True
                     else:
                         logging.error(str(self.seed) + ": failed to add circumcenter of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                 else:
+                    logging.error(str(self.seed) + ": reached convergence threat "+convergenceDetectorDict[centerFindIdx])
                     center = Point(eg.zero,eg.zero)
                     for i in range(3):
                         center += self.tri.point(self.tri.triangles[centerFindIdx,i])

@@ -48,12 +48,14 @@ def showSolutions(solname="solutions.zip"):
 
 plot_counter = 0
 
-def updatePlot(ax1,ax2,ax3,diff,extremum,zippedList,idb,name,baseName):
+def updatePlot(ax1,ax2,ax3,diff,diffHeat,zippedList,idb,name,baseName):
     ax1.clear()
     ax2.clear()
     ax3.clear()
     global plot_counter
-    ax1.imshow(diff, cmap='PiYG', interpolation='nearest', vmin=-extremum, vmax=extremum)
+    extremum = max(abs(np.max(diffHeat)),abs(np.min(diffHeat)))
+
+    ax1.imshow(diffHeat, cmap='PiYG', interpolation='nearest', vmin=-extremum, vmax=extremum)
     for i in range(len(diff)):
         for j in range(len(diff[i])):
             if i * 30 + j == plot_counter:
@@ -120,19 +122,23 @@ def compareSolutions(base,others):
         diff.append(len(a.steiner_points_x) - len(other[idx].steiner_points_x))
         #baseName.append(bases[baseIdx])
         #name.append(others[idx])
-        fullList.append([[a,other[idx]],len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx].name,base[baseIdx].name,idb[a.instance_uid].num_points])
+        fullList.append([[a,other[idx]],len(a.steiner_points_x),len(a.steiner_points_x) - len(other[idx].steiner_points_x),others[idx].name,base[baseIdx].name,idb[a.instance_uid].num_points])
 
     #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
-    #fullList = sorted(fullList,key = lambda entry : entry[4])
+    #fullList = sorted(fullList,key = lambda entry : entry[5])
     zippedList = [e[0] for e in fullList]
-    diff = [e[1] for e in fullList]
-    name = [e[2] for e in fullList]
-    baseName = [e[3] for e  in fullList]
+    base = [e[1] for e in fullList]
+    diff = [e[2] for e in fullList]
+    name = [e[3] for e in fullList]
+    baseName = [e[4] for e  in fullList]
 
 
     minimum = min(diff)
     maximum = max(diff)
     extremum = max(abs(minimum),abs(maximum))
+
+    diffheat = (((np.array(base) + np.array(diff))/np.array(base))-1)
+    diffheat = np.reshape(diffheat,(5,30))
 
     diff = np.reshape(diff,(5,30))
 
@@ -149,7 +155,7 @@ def compareSolutions(base,others):
             global plot_counter
             plot_counter = 30 * (min(max(0,int(event.ydata+0.5)),4)) + min(max(0,int(event.xdata+0.5)),29)
             plot_counter = min(max(0,plot_counter),149)
-            updatePlot(ax1, ax2, ax3, diff, extremum, zippedList, idb, name, baseName)
+            updatePlot(ax1, ax2, ax3, diff, diffheat, zippedList, idb, name, baseName)
             plt.draw()
 
     def on_press(event):
@@ -167,7 +173,7 @@ def compareSolutions(base,others):
         if event.key == 'up':
             plot_counter = max(plot_counter-30,0)
 
-        updatePlot(ax1, ax2, ax3, diff, extremum, zippedList, idb, name, baseName)
+        updatePlot(ax1, ax2, ax3, diff, diffheat, zippedList, idb, name, baseName)
         plt.draw()
 
 
@@ -175,7 +181,7 @@ def compareSolutions(base,others):
     fig.canvas.mpl_connect('key_press_event',on_press)
     fig.canvas.mpl_connect('button_press_event', on_click)
 
-    updatePlot(ax1,ax2,ax3,diff,extremum,zippedList,idb,name,baseName)
+    updatePlot(ax1,ax2,ax3,diff,diffheat,zippedList,idb,name,baseName)
 
     plt.show()
 
