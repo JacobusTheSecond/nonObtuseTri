@@ -169,9 +169,10 @@ def init_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times):
 
 
 def seeded_Multi():
-    np.set_printoptions(linewidth=200,formatter={"all":lambda x: str(x).rjust(3)})
-    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     numThreads = 96
+    np.set_printoptions(linewidth=4*(96//2)+3,formatter={"all":lambda x: str(x).rjust(3)})
+    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
+    #numThreads = 96
     total = 8*numThreads
     filepath = Path(__file__)
     idb = InstanceDatabase(
