@@ -53,8 +53,8 @@ def solveEveryInstance(solname="cur_solution.zip"):
     axs = None
 
 
-    debugSeed = 318433188#754181797#267012647
-    debugIdxs = [114]#64#7#8#88
+    debugSeed = 209652396#754181797#267012647
+    debugIdxs = None#[114]#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
