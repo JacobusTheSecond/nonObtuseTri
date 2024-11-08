@@ -172,7 +172,7 @@ def seeded_Multi():
     print(seeds)
     print(seeds[98])
     lock = manager.Lock()
-    with Pool(processes=numThreads,initializer=init_pool_processes,initargs=(lock,returner,seeds,best)) as pool:
+    with Pool(initializer=init_pool_processes,initargs=(lock,returner,seeds,best)) as pool:
         result = pool.map_async(workerFunction,range(total),chunksize=1)
 
         result.wait()
