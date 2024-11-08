@@ -2255,7 +2255,7 @@ class QualityImprover:
                     else:
                         logging.error(str(self.seed) + ": failed to add complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                 elif convergenceDetectorDict[centerFindIdx] < 20:
-                    logging.error(str(self.seed) + ": reached convergence threat "+convergenceDetectorDict[centerFindIdx])
+                    logging.error(str(self.seed) + ": reached convergence threat "+str(convergenceDetectorDict[centerFindIdx]))
                     center = Point(*self.tri.circumCenters[centerFindIdx])
                     assert (center != None)
                     if self.tri.addPoint(center):
@@ -2263,7 +2263,7 @@ class QualityImprover:
                     else:
                         logging.error(str(self.seed) + ": failed to add circumcenter of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                 else:
-                    logging.error(str(self.seed) + ": reached convergence threat "+convergenceDetectorDict[centerFindIdx])
+                    logging.error(str(self.seed) + ": reached convergence threat "+str(convergenceDetectorDict[centerFindIdx]))
                     center = Point(eg.zero,eg.zero)
                     for i in range(3):
                         center += self.tri.point(self.tri.triangles[centerFindIdx,i])
