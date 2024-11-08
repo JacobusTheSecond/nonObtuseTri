@@ -140,7 +140,7 @@ def workerFunction(index):
             print("PROGRESS:")
             print(progress)
             print("QUALITY:")
-            print(best)
+            print(np.array(best))
         lock.release()
         i += 1
 
@@ -170,7 +170,7 @@ def seeded_Multi():
     np.random.seed(0)
     seeds = [np.random.randint(0,1000000000) for i in range(total)]
     print(seeds)
-    print(seeds[98])
+    #print(seeds[98])
     lock = manager.Lock()
     with Pool(initializer=init_pool_processes,initargs=(lock,returner,seeds,best)) as pool:
         result = pool.map_async(workerFunction,range(total),chunksize=1)
