@@ -194,11 +194,12 @@ if __name__=="__main__":
     gigaSeeded = filepath.parent.parent/"instance_solutions"/"gigaSeeded"
     output = filepath.parent.parent/"instance_solutions"/"output"
     withComplicatedCenter = filepath.parent.parent/"instance_solutions"/"withComplicatedCenter"
+    withConstrainedVoronoi = filepath.parent.parent/"instance_solutions"/"withConstrainedVoronoi"
 
     allexceptnumeric = []
-    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output]:
+    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded]:
         allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    compareSolutions(others=[v for v in gigaSeeded.iterdir()],base=allexceptnumeric)
+    compareSolutions(others=[v for v in withConstrainedVoronoi.iterdir()],base=allexceptnumeric)
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
