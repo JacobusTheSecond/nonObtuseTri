@@ -145,7 +145,8 @@ def workerFunction(index):
             print("QUALITY:")
             print(np.array(best))
             print("TIMES:")
-            print(np.array(np.full(np.array(times).shape ,time.time()) - np.array(times),dtype=int)//60)
+            tts = np.array(times)
+            print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
         lock.release()
         i += 1
     lock.acquire()
