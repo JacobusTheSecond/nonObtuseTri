@@ -192,7 +192,7 @@ def seeded_Multi():
         result.wait()
         allSolutions = [[sol for sol in sols] for sols in returner]
 
-        solLoc = filepath.parent.parent / "instance_solutions" / "out"
+        solLoc = filepath.parent.parent / "instance_solutions" / "out2"
 
         for i in range(len(allSolutions)):
             solname = "seed"+str(seeds[i])+".zip"
