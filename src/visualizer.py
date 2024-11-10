@@ -1,3 +1,4 @@
+import logging
 import os
 
 import matplotlib.pyplot as plt
@@ -76,6 +77,7 @@ def updatePlot(ax1,ax2,ax3,diff,diffHeat,zippedList,idb,name,baseName):
     ax1.set_title(instance.instance_uid)
 
 def compareSolutions(base,others):
+    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
 
     filepath = Path(__file__)
     idb = InstanceDatabase(filepath.parent.parent/"challenge_instances_cgshop25"/"zips"/"challenge_instances_cgshop25_rev1.zip")
@@ -83,6 +85,7 @@ def compareSolutions(base,others):
     #sols1 = ZipSolutionIterator(zips/base)
     basesols = []
     for name in base:
+        logging.info("reading " + str(name))
         basesols.append([sol for sol in ZipSolutionIterator(name)])
 
     transformedOtherSols = [[] for sol in basesols[0]]
@@ -95,6 +98,7 @@ def compareSolutions(base,others):
 
     othersols = []
     for name in others:
+        logging.info("reading " + str(name))
         othersols.append([sol for sol in ZipSolutionIterator(name)])
 
     transformedOtherSols = [[] for sol in othersols[0]]
@@ -113,6 +117,7 @@ def compareSolutions(base,others):
     fullList = []
 
     for bases,other in zip(basesols,othersols):
+        logging.info("identifying best for " + str(bases[0].instance_uid))
         baseIdx = np.argmin([len(a.steiner_points_x) for a in bases])
         a = bases[baseIdx]
         idx = np.argmin([len(o.steiner_points_x) for o in other])
@@ -201,11 +206,13 @@ if __name__=="__main__":
     output = filepath.parent.parent/"instance_solutions"/"output"
     withComplicatedCenter = filepath.parent.parent/"instance_solutions"/"withComplicatedCenter"
     withConstrainedVoronoi = filepath.parent.parent/"instance_solutions"/"withConstrainedVoronoi"
+    new1 = filepath.parent.parent/"instance_solutions"/"constrainedVoronoiFromInside"
+    #new2 = filepath.parent.parent/"instance_solutions"/"constrainedVoronoiFromOutside"
 
     allexceptnumeric = []
-    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded]:
+    for list in [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]:
         allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    compareSolutions(others=[v for v in withConstrainedVoronoi.iterdir()],base=allexceptnumeric)
+    compareSolutions(others=[v for v in new1.iterdir()],base=allexceptnumeric)
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
