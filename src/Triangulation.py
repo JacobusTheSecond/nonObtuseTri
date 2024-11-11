@@ -27,7 +27,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = True#self.withValidate
+        self.plotWithIds = self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -2132,7 +2132,7 @@ class QualityImprover:
             logging.debug("completed updating Geometric problems")
             logging.debug("drawing...")
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
-            if plotUpdater == 1:
+            if plotUpdater == 5:
                 #self.tri.plotCoordinateQuality()
                 self.tri.plotTriangulation()
                 plotUpdater = 0
