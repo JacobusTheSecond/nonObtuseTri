@@ -1,6 +1,4 @@
 import logging
-import os
-import pickle
 
 import matplotlib.pyplot as plt
 import matplotlib
@@ -10,6 +8,7 @@ from pathlib import Path
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, verify, ZipWriter
 
 from hacky_internal_visualization_stuff import plot_solution
+from solutionManagement import loadSolutions
 
 
 def verifyAll(solname="solutions.zip"):
@@ -76,63 +75,6 @@ def updatePlot(ax1,ax2,ax3,diff,diffHeat,zippedList,idb,name,baseName):
     plot_solution(ax2, instance, sol1, result1,prefix=baseName[plot_counter])
     plot_solution(ax3, instance, sol2, result2,prefix=name[plot_counter])
     ax1.set_title(instance.instance_uid)
-
-def loadSolutions(foldername):
-
-    best = []
-    #first unpickle
-    fn = foldername.name
-    summaryName = foldername.parent.parent/"solution_summaries"/(str(fn)+".zip")
-    pickelName = foldername.parent.parent/"solution_summaries"/(str(fn)+".pkl")
-    if summaryName.exists():
-        i = 0
-        names = pickle.load(open(pickelName, "rb"))
-
-        for sol in ZipSolutionIterator(summaryName):
-            if len(best) == i:
-                best.append([sol,names[i]])
-            elif len(sol.steiner_points_x) < len(best[i][0].steiner_points_x):
-                assert sol.instance_uid == best[i][0].instance_uid
-                best[i] = [sol,names[i]]
-                logging.info(str(names[i])+" is better at "+str(sol.instance_uid) +" with solution size "+str(len(sol.steiner_points_x)))
-            i += 1
-
-    #first build the list
-    if foldername.exists():
-        for solname in foldername.iterdir():
-            i = 0
-            logging.info("reading "+str(solname))
-            for sol in ZipSolutionIterator(solname):
-                if len(best) == i:
-                    best.append([sol,solname])
-                elif len(sol.steiner_points_x) < len(best[i][0].steiner_points_x):
-                    assert sol.instance_uid == best[i][0].instance_uid
-                    best[i] = [sol,solname]
-                    logging.info(str(solname)+" is better at "+str(sol.instance_uid) +" with solution size "+str(len(sol.steiner_points_x)))
-                i += 1
-
-    if len(best) == 0:
-        logging.error("No matching data found for folder "+str(foldername))
-        return []
-
-    #now rebuild summary
-    if summaryName.exists():
-        summaryName.unlink()
-
-    if pickelName.exists():
-        pickelName.unlink()
-    #Write the solutions to a new zip file
-    toWriteNames = []
-    with ZipWriter(summaryName) as zw:
-        logging.info("writting sol summary at "+str(summaryName))
-        for solution,name in best:
-            zw.add_solution(solution)
-            toWriteNames.append(name)
-    with open(pickelName, "wb") as f:
-        logging.info("writting name summary at "+str(pickelName))
-        pickle.dump(toWriteNames, f)
-
-    return best
 
 
 def compareSolutions(base,others):
@@ -248,6 +190,7 @@ def compareSolutions(base,others):
     updatePlot(ax1,ax2,ax3,diff,diffheat,zippedList,idb,name,baseName)
 
     plt.show()
+
 
 if __name__=="__main__":
     #showSolutions()

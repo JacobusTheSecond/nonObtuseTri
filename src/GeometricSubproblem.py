@@ -392,7 +392,7 @@ class StarSolver:
 
                 #intersect ray with circles
                 for c,rsq in circles:
-                    if (inters := eg.outsideIntersectionsSegmentCircle(c,rsq,rayA)) is not None:
+                    if (inters := eg.insideIntersectionsSegmentCircle(c,rsq,rayA)) is not None:
                         for inter in inters:
                             if inter == rayA.source() or inter == rayA.target():
                                 continue
