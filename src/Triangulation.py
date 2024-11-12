@@ -27,7 +27,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = self.withValidate
+        self.plotWithIds = True#self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -1991,6 +1991,20 @@ class Triangulation:
                     self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
                     pass
 
+        def verifyPointInRegion(p:Point):
+            if eg.distsq(myCC, p) > myCRsq:
+                return False
+
+            # outside slab
+            if eg.dot(other - base, p - base) < FieldNumber(0):
+                return False
+            if eg.dot(base - other, p - other) < FieldNumber(0):
+                return False
+            if eg.dot(orth, p - base) < FieldNumber(0):
+                return False
+            return True
+
+
         candidatePoints = []
         candidateRounders = []
         for i in range(len(candidateIntersections)):
@@ -1998,20 +2012,10 @@ class Triangulation:
             candidateRounder = rounderObjects[i]
             if withPlot:
                 self.internalaxs.scatter([float(p[0])], [float(p[1])], marker="*", color='yellow', zorder=101)
-            # outside
-            if eg.distsq(myCC, p) > self.circumRadiiSqr[triIdx]:
-                continue
 
-            # outside slab
-            if eg.dot(other - base, p - base) < FieldNumber(0):
-                continue
-            if eg.dot(base - other, p - other) < FieldNumber(0):
-                continue
-            if eg.dot(orth, p - base) < FieldNumber(0):
-                continue
-
-            candidatePoints.append([d, p])
-            candidateRounders.append(candidateRounder)
+            if verifyPointInRegion(p):
+                candidatePoints.append([d, p])
+                candidateRounders.append(candidateRounder)
             if withPlot:
                 self.internalaxs.scatter([float(p[0])], [float(p[1])], marker="*", color='red', zorder=1000)
 
@@ -2039,6 +2043,8 @@ class Triangulation:
 
                 addor = None
                 for r in rounded:
+                    if not verifyPointInRegion(r):
+                        continue
                     if addor is not None:
                         break
                     if verifyPointDoesntCross(r):
@@ -2216,7 +2222,7 @@ class QualityImprover:
 
                 assert(tolerance >= 0)
                 mask = np.full(self.tri.badTris.shape, False)
-                mode = "fromOutside" #"fromOutside"
+                mode = "fromInside" #"fromOutside"
 
                 if mode == "fromInside":
                     val = np.max(dists[nonSuperseeded])
@@ -2242,16 +2248,22 @@ class QualityImprover:
                     center = None
                     bA = eg.badAngle(self.tri.point(self.tri.triangles[centerFindIdx,0]),self.tri.point(self.tri.triangles[centerFindIdx,1]),self.tri.point(self.tri.triangles[centerFindIdx,2]))
                     if self.tri.triangleMap[centerFindIdx,bA,2] != noneEdge:
+                        #logging.error("alt")
                         center = eg.altitudePoint(Segment(self.tri.point(self.tri.triangles[centerFindIdx,(bA+1)%3]),self.tri.point(self.tri.triangles[centerFindIdx,(bA+2)%3])),self.tri.point(self.tri.triangles[centerFindIdx,bA]))
                     else:
+                        #logging.error("circ")
                         center = self.tri.findComplicatedCenter(centerFindIdx)
                     if (center == None):
                         center = self.tri.findComplicatedCenter(centerFindIdx)
                         assert(False)
+                    triang = list(self.tri.triangles[centerFindIdx])
                     if self.tri.addPoint(center):
                         logging.info("successfully added complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                         lastEdit = "circumcenter"
                         added = True
+                        allIn = np.all([vIdx in self.tri.triangles[centerFindIdx] for vIdx in triang])
+                        if allIn:
+                            logging.error("Addition did not flip the triangle even though it should...")
                     else:
                         logging.error(str(self.seed) + ": failed to add complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
                 elif convergenceDetectorDict[centerFindIdx] < 20:

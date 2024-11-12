@@ -12,6 +12,9 @@ import numpy as np
 
 
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
+
+from src.solutionManagement import updateSummaries
+
 exact = True
 if exact:
     #from exactTriangulation import Triangulation
@@ -54,7 +57,7 @@ def solveEveryInstance(solname="cur_solution.zip"):
 
 
     debugSeed = 901272061#754181797#267012647
-    debugIdxs = [125]#[114]#64#7#8#88
+    debugIdxs = None#[125]#[114]#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
@@ -212,6 +215,8 @@ def seeded_Multi():
                         zw.add_solution(solution)
             except:
                 print("some error occured")
+
+        updateSummaries()
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
