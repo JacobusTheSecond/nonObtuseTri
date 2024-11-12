@@ -13,7 +13,7 @@ import numpy as np
 
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
 
-from src.solutionManagement import updateSummaries
+from solutionManagement import updateSummaries
 
 exact = True
 if exact:
