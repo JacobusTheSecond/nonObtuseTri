@@ -81,7 +81,7 @@ def circumcenter(a:Point,b:Point,c:Point) -> Point:
     cc = (Point(ux, uy).scale(d))
     return cc
 
-def innerIntersect(p1:Point, p2:Point, p3:Point, p4:Point):
+def innerIntersect(p1:Point, p2:Point, p3:Point, p4:Point,insideFirst=False,insideSecond=True):
     x1,y1 = p1
     x2,y2 = p2
     x3,y3 = p3
@@ -90,11 +90,19 @@ def innerIntersect(p1:Point, p2:Point, p3:Point, p4:Point):
     if denom == zero: # parallel
         return None
     ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
-    if ua < zero or ua > FieldNumber(1): # out of range
-        return None
+    if insideFirst:
+        if ua <= zero or ua >= FieldNumber(1): # out of range
+            return None
+    else:
+        if ua < zero or ua > FieldNumber(1): # out of range
+            return None
     ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
-    if ub <= zero or ub >= FieldNumber(1): # out of range
-        return None
+    if insideSecond:
+        if ub <= zero or ub >= FieldNumber(1): # out of range
+            return None
+    else:
+        if ub < zero or ub > FieldNumber(1): # out of range
+            return None
     x = x1 + ua * (x2-x1)
     y = y1 + ua * (y2-y1)
     return Point(x,y)
