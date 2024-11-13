@@ -34,6 +34,7 @@
 #tempsolutions
 challenge_instances_cgshop25/zips/cur_solutions.zip
 instance_solutions/**
+out/**
 
 #backups
 *.bak
