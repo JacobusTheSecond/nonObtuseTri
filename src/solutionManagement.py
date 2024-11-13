@@ -65,4 +65,5 @@ def loadSolutions(foldername):
 def updateSummaries():
     filepath = Path(__file__)
     for name in (filepath.parent.parent/"instance_solutions").iterdir():
-        loadSolutions(name)
+        if name.is_dir():
+            loadSolutions(name)
