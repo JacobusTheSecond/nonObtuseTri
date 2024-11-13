@@ -93,7 +93,7 @@ def compareSolutions(base,others):
             elif len(sol.steiner_points_x) < len(bestBases[i][0].steiner_points_x):
                 assert sol.instance_uid == bestBases[i][0].instance_uid
                 bestBases[i] = [sol,solname]
-                logging.info(str(solname)+" is better at "+str(sol.instance_uid) +" with solution size "+str(len(sol.steiner_points_x)))
+                #logging.info(str(solname)+" is better at "+str(sol.instance_uid) +" with solution size "+str(len(sol.steiner_points_x)))
             i += 1
 
     bestOthers = []
@@ -106,7 +106,7 @@ def compareSolutions(base,others):
             elif len(sol.steiner_points_x) < len(bestOthers[i][0].steiner_points_x):
                 assert sol.instance_uid == bestOthers[i][0].instance_uid
                 bestOthers[i] = [sol,solname]
-                logging.info(str(solname)+" is better at "+str(sol.instance_uid) +" with solution size "+str(len(sol.steiner_points_x)))
+                #logging.info(str(solname)+" is better at "+str(sol.instance_uid) +" with solution size "+str(len(sol.steiner_points_x)))
             i += 1
 
     global plot_counter

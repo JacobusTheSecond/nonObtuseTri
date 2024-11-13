@@ -27,7 +27,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = True#self.withValidate
+        self.plotWithIds = self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -1951,6 +1951,7 @@ class Triangulation:
                 self.internalaxs.plot([p[0],q[0]],[p[1],q[1]],color="black")
 
         candidateIntersections = []
+        spawningObjects = []
         rounderObjects = []
         for vedge,vseg,rounder in zip(vEdges,vSegments,vRounders):
             closestPointId = self.triangles[vedge[0][0],(vedge[0][1]+1)%3]
@@ -1958,8 +1959,10 @@ class Triangulation:
 
             candidateIntersections.append([eg.distsq(closestPoint, vseg.source()), vseg.source()])
             rounderObjects.append(rounder[0])
+            spawningObjects.append(vseg)
             candidateIntersections.append([eg.distsq(closestPoint, vseg.target()), vseg.target()])
             rounderObjects.append(rounder[1])
+            spawningObjects.append(vseg)
 
 
             #first intersect with boundingbox
@@ -1967,6 +1970,7 @@ class Triangulation:
                 inter = eg.innerIntersect(vseg.source(),vseg.target(),bbseg.source(),bbseg.target())
                 if inter != None:
                     candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
+                    spawningObjects.append(vseg)
                     rounderObjects.append(bbseg)
                     if withPlot:
                         self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
@@ -1977,6 +1981,7 @@ class Triangulation:
                 if inter != None:
                     inter = eg.roundExactOnSegment(encseg,inter)
                     candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
+                    spawningObjects.append(vseg)
                     rounderObjects.append(encseg)
                     if withPlot:
                         self.internalaxs.scatter([float(inter[0])], [float(inter[1])], marker="*", color='blue', zorder=100)
@@ -1985,6 +1990,7 @@ class Triangulation:
             inters = eg.insideIntersectionsSegmentCircle(myCC,myCRsq,vseg)
             for inter in inters:
                 candidateIntersections.append([eg.distsq(closestPoint,inter),inter])
+                spawningObjects.append(vseg)
                 #probably not best, but whatever
                 rounderObjects.append(None)
                 if withPlot:
@@ -2006,6 +2012,7 @@ class Triangulation:
 
 
         candidatePoints = []
+        candidateSpawners = []
         candidateRounders = []
         for i in range(len(candidateIntersections)):
             d, p = candidateIntersections[i]
@@ -2015,6 +2022,7 @@ class Triangulation:
 
             if verifyPointInRegion(p):
                 candidatePoints.append([d, p])
+                candidateSpawners.append(spawningObjects[i])
                 candidateRounders.append(candidateRounder)
             if withPlot:
                 self.internalaxs.scatter([float(p[0])], [float(p[1])], marker="*", color='red', zorder=1000)
@@ -2027,7 +2035,7 @@ class Triangulation:
                         continue
                     segSource = self.point(seg[0])
                     segTarget = self.point(seg[1])
-                    if (inter := eg.innerIntersect(segSource, segTarget, triP, p)) is not None:
+                    if (inter := eg.innerIntersect(segSource, segTarget, triP, p,False,False)) is not None:
                         return False
             return True
 
@@ -2041,22 +2049,23 @@ class Triangulation:
             if actualDist is None or d > actualDist:
                 rounded = eg.roundExactBoundor(p) if candidateRounders[i] is None else eg.roundExactOnSegmentBounder(candidateRounders[i],p)
 
-                addor = None
-                for r in rounded:
-                    if not verifyPointInRegion(r):
-                        continue
-                    if addor is not None:
-                        break
-                    if verifyPointDoesntCross(r):
+                verified = verifyPointDoesntCross((candidateSpawners[i].source() + candidateSpawners[i].target()).scale(eg.onehalf))
+
+                if verified:
+                    addor = None
+                    for r in rounded:
+                        if not verifyPointInRegion(r):
+                            continue
+                        if addor is not None:
+                            break
                         addor = r
 
-                if addor is None:
-                    if verifyPointDoesntCross(p):
+                    if addor is None:
                         addor = p
 
-                if addor is not None:
-                    actualInside = addor
-                    actualDist = d
+                    if addor is not None:
+                        actualInside = addor
+                        actualDist = d
         return actualInside
 
     def combinatorialDepth(self):
