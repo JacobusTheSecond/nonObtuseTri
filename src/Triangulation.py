@@ -14,8 +14,6 @@ import triangle as tr  # https://rufat.be/triangle/
 
 import logging
 
-from src.primitiveTester import inCircle
-
 
 class Triangulation:
     def __init__(self, instance: Cgshop2025Instance, withValidate=False, seed=0, axs=None):
@@ -2173,11 +2171,11 @@ class Triangulation:
                     queryPoints.append(p)
         topoDisks = set()
         for q in queryPoints:
-            if inCircle(myCC,myCRsqr,q) == "outside":
+            if eg.inCircle(myCC,myCRsqr,q) == "outside":
                 continue
             topoDisk = []
             for i in intersecting:
-                if inCircle(self.circumcenter(i),self.circumRadiiSqr[i],q) != "outside":
+                if eg.inCircle(self.circumcenter(i),self.circumRadiiSqr[i],q) != "outside":
                     intersectsEdge = False
                     for otherI in range(3):
                         for e, s in zip(limitingEdges, limitingSegments):
