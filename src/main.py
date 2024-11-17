@@ -56,8 +56,8 @@ def solveEveryInstance(solname="cur_solution.zip"):
     axs = None
 
 
-    debugSeed = 0#754181797#267012647
-    debugIdxs = None#[125]#[114]#64#7#8#88
+    debugSeed = 573126970#754181797#267012647
+    debugIdxs = [9]#[125]#[114]#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
@@ -178,7 +178,7 @@ def seeded_Multi():
     np.set_printoptions(linewidth=4*(96//2)+3,formatter={"all":lambda x: str(x).rjust(3)})
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     #numThreads = 96
-    total = 4*numThreads
+    total = 2*numThreads
     filepath = Path(__file__)
     idb = InstanceDatabase(
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
