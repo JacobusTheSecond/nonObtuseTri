@@ -5,7 +5,6 @@ import matplotlib.ticker
 import matplotlib.pyplot as plt
 from cgshop2025_pyutils import Cgshop2025Solution, Cgshop2025Instance
 from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
-from sqlalchemy.sql.operators import truediv
 
 import exact_geometry as eg
 from constants import *
