@@ -8,7 +8,7 @@ from cgshop2025_pyutils.geometry import Point, Segment, FieldNumber, intersectio
 
 class GeometricSubproblem:
     def __init__(self, vIdxs, triIdxs, boundary, exactPoints, numericPoints, innerCons, boundaryCons, boundaryType,
-                 steinercutoff, numBadTris,numBoundaryDroppers, axs=None):
+                 steinercutoff, numBadTris,numBoundaryDroppers, maxTolerance=None, axs=None):
         # some housekeeping to have some handle on what to delete later
 
         # lets make this better
@@ -18,6 +18,10 @@ class GeometricSubproblem:
         self.numericVerts = numericPoints
         self.numBadTris = numBadTris
         self.numBoundaryDroppers = numBoundaryDroppers
+        if maxTolerance is None:
+            self.tolerance = 1000
+        else:
+            self.tolerance = maxTolerance
 
         self.localMap = np.array(list(vIdxs) + list(boundary))
         self.isSteiner = [False if v < steinercutoff else True for v in self.localMap]
@@ -32,8 +36,8 @@ class GeometricSubproblem:
             positions = np.where(self.localMap == v)[0]
             boundaryIdxs.append(positions[0])
 
-        boundaryIdxs = np.array(boundaryIdxs)
-        insideIdxs = np.array(insideIdxs)
+        boundaryIdxs = np.array(boundaryIdxs,dtype=int)
+        insideIdxs = np.array(insideIdxs,dtype=int)
 
         insideCons = []
         for s, t in innerCons:
@@ -422,7 +426,7 @@ class StarSolver:
                 badsHash = 0
                 isVeryBad = False
                 for bIdx in range(len(boundary)):
-                    if len(bads) > self.patialTolerance:
+                    if len(bads) > min(gp.tolerance,self.patialTolerance):
                         break
                     i,j = boundary[bIdx]
                     bi,bj = self.points[i],self.points[j]
@@ -438,7 +442,7 @@ class StarSolver:
                     elif bA == 1 or bA == 0:
                         isVeryBad = True
                         break
-                if len(bads) > self.patialTolerance:
+                if len(bads) > min(gp.tolerance,self.patialTolerance):
                     continue
                 if isVeryBad:
                     continue

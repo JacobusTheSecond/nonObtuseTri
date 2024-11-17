@@ -1,16 +1,20 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 from cgshop2025_pyutils import InstanceDatabase,ZipSolutionIterator,verify
 from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
+matplotlib.use("TkAgg")
 
 from exact_geometry import circumcenter
 
 plot_counter = 0
 points = [(378, 709), (433, 575), (504, 575), (744.5, 701.2), (716, 1292)]
+floatradii = [200,50,90,300,50]
 exactXs = [p[0] for p in points]#['1885901035659067045/17428496250830848', '187', '208', '198593701368361595683/944229799608451072', '226', '1132576691202293755/8714248125415424']
 exactYs = [p[1] for p in points]#['835550492288332099259/278855940013293568', '3011', '3021', '5817900572796388795173/1888459599216902144', '3484', '430935302576235609765/139427970006646784']
 exactPoints = [Point(FieldNumber(exactXs[i]),FieldNumber(exactYs[i])) for i in range(len(exactYs))]
+radii = [FieldNumber(r*r) for r in floatradii ]
 xs = [float(p.x()) for p in exactPoints]#[3,7,8.5,7,3,1.5]
 ys = [float(p.y()) for p in exactPoints]#[1,1,3.5,6,6,3.5]
 constrainted = True
@@ -1013,5 +1017,35 @@ def primitiveTester():
 
     plt.show()
 
+def circleTester():
+    fig, axs = plt.subplots(1, 1)
+
+    import exact_geometry as eg
+
+    global totalNum
+    global xs
+    global ys
+    global cs
+    axs.clear()
+    axs.scatter(xs,ys,color="blue",zorder=10000000)
+
+    for i in range(len(xs)):
+        mx = xs[i]
+        my = ys[i]
+        r = floatradii[i]
+        circle = plt.Circle((mx, my), r, color="yellow", fill=False, zorder=1000)
+        axs.add_patch(circle)
+    for i in range(len(xs)):
+        for j in range(i,len(xs)):
+            for p in eg.getCircleIntersections(exactPoints[i],radii[i],exactPoints[j],radii[j]):
+                numP = eg.numericPoint(p)
+                axs.scatter([numP[0]],[numP[1]],color="red",zorder=10000000)
+
+
+    axs.set_aspect('equal')
+    plt.draw()
+
+    plt.show()
+
 if __name__=="__main__":
-    primitiveTester()
+    circleTester()
