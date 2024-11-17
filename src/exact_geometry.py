@@ -1,7 +1,6 @@
 from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 import numpy as np
 from matplotlib import pyplot as plt
-from sqlalchemy.util.preloaded import sql_sqltypes
 
 zero = FieldNumber(0)
 onehalf = FieldNumber(0.5)
