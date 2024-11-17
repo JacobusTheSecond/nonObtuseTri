@@ -1,6 +1,7 @@
 from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 import numpy as np
 from matplotlib import pyplot as plt
+from sqlalchemy.util.preloaded import sql_sqltypes
 
 zero = FieldNumber(0)
 onehalf = FieldNumber(0.5)
@@ -363,7 +364,7 @@ def rayIntersectsCircle(m:Point,rsqr:FieldNumber,pq:Segment):
             return True
     return False
 
-def binaryIntersection(m:Point,rsqr:FieldNumber,pq:Segment):
+def binaryIntersection(m:Point,rsqr:FieldNumber,pq:Segment,acc=1000):
     p = pq.source()
     q = pq.target()
     pQuery = inCircle(m,rsqr,p)
@@ -385,7 +386,7 @@ def binaryIntersection(m:Point,rsqr:FieldNumber,pq:Segment):
     if inside == None or outside == None:
         return "exact",None
     else:
-        while Segment(inside,outside).squared_length() > FieldNumber(0.00000000001):
+        while Segment(inside,outside).squared_length() > (FieldNumber(1)/FieldNumber(acc)):
             mid = inside.scale(FieldNumber(0.5)) + outside.scale(FieldNumber(0.5))
             midQ = inCircle(m,rsqr,mid)
             if midQ == "on":
@@ -396,7 +397,7 @@ def binaryIntersection(m:Point,rsqr:FieldNumber,pq:Segment):
                 inside = mid
         return "nonexact",outside
 
-def binaryIntersectionInside(m:Point,rsqr:FieldNumber,pq:Segment):
+def binaryIntersectionInside(m:Point,rsqr:FieldNumber,pq:Segment,acc=1000):
     p = pq.source()
     q = pq.target()
     pQuery = inCircle(m,rsqr,p)
@@ -418,7 +419,7 @@ def binaryIntersectionInside(m:Point,rsqr:FieldNumber,pq:Segment):
     if inside == None or outside == None:
         return "exact",None
     else:
-        while Segment(inside,outside).squared_length() > FieldNumber(0.00000000001):
+        while Segment(inside,outside).squared_length()  > (FieldNumber(1)/FieldNumber(acc)):
             mid = inside.scale(FieldNumber(0.5)) + outside.scale(FieldNumber(0.5))
             midQ = inCircle(m,rsqr,mid)
             if midQ == "on":
@@ -1191,357 +1192,89 @@ def getParamOfPointOnSegment(seg:Segment,p:Point):
 def numericPoint(p:Point):
     return [float(p.x()),float(p.y())]
 
-def getConstrainingIntervalsForCenterOfLinkConstrained(points,constraintA,constraintB,num=0,axs=None):
-    #get orientation
-    onlyLeft = True
-    onlyRight = True
-    if axs != None:
-        axs.clear()
+def circleIntersectsCircle(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc=10):
 
-    for i in range(len(points)):
-        a = points[i]
-        b = points[(i+1)%len(points)]
-        c = points[(i+2)%len(points)]
-        side = onWhichSide(Segment(a,b),c)
-        if  side == "left":
-            onlyRight = False
-        elif side == "right":
-            onlyLeft = False
+    if p == q:
+        return True
 
-    if (onlyLeft == False) and (onlyRight == False):
+    bigP,bigRsqr,smallP,smallRsqr = p,rpsq,q,rqsq
+    if rpsq < rqsq:
+        bigP,bigRsqr,smallP,smallRsqr = q,rqsq,p,rpsq
+
+    diff = smallP - bigP
+    if inCircle(bigP,bigRsqr,bigP+diff)=="inside":
+        if dot(diff,diff) < FieldNumber(1):
+            diff = diff.scale(FieldNumber(1)/dot(diff,diff))
+        if bigRsqr > FieldNumber(1):
+            diff = diff.scale(bigRsqr)
+    assert(inCircle(bigP,bigRsqr,bigP+diff)!="inside")
+
+    baseSeg = outsideClipSegmentToCircle(bigP,bigRsqr,Segment(bigP,bigP+diff))
+    assert(len(baseSeg) == 2)
+    seg = outsideClipSegmentToCircle(smallP,smallRsqr,Segment(baseSeg[0],baseSeg[1]))
+    if len(seg) == 0:
+        return False
+    assert(len(seg) != 1)
+    return True
+
+def getCircleIntersections(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc=10):
+
+    if p == q:
         return []
 
-    if onlyRight:
-        intervals = getConstrainingIntervalsForCenterOfLinkConstrained(list(reversed(points)),len(points) - 1 - constraintB, len(points) - 1 - constraintA,num,axs)
-        flippedIntervals = []
-        for interval in intervals:
-            flippedIntervals.append([FieldNumber(1)-interval[1],FieldNumber(1)-interval[0]])
-        return flippedIntervals
-    elif onlyLeft:
+    bigP,bigRsqr,smallP,smallRsqr = p,rpsq,q,rqsq
+    if rpsq < rqsq:
+        bigP,bigRsqr,smallP,smallRsqr = q,rqsq,p,rpsq
 
-        trianglebases = []
-        for i in range(len(points)):
-            nextI = (i+1)%len(points)
-            if (i == constraintA and nextI == constraintB) or (i == constraintB and nextI == constraintA):
-                continue
-            else:
-                trianglebases.append([i,nextI])
-                if axs != None:
-                    axs.plot([numericPoint(points[j])[0] for j in [i,nextI]],[numericPoint(points[j])[1] for j in [i,nextI]],color="black")
+    diff = smallP - bigP
+    if inCircle(bigP,bigRsqr,bigP+diff)=="inside":
+        if dot(diff,diff) < FieldNumber(1):
+            diff = diff.scale(FieldNumber(1)/dot(diff,diff))
+        if bigRsqr > FieldNumber(1):
+            diff = diff.scale(bigRsqr)
+    assert(inCircle(bigP,bigRsqr,bigP+diff)!="inside")
 
-        circles = []
-        for i,j in trianglebases:
-            c = (points[i]+points[j]).scale(onehalf)
-            rsq = distsq(c,points[j])
-            circles.append([c,rsq])
-            if axs != None:
-                circle = plt.Circle((numericPoint(c)[0],numericPoint(c)[1]), np.sqrt(float(rsq)), color="yellow", fill=False, zorder=1000)
-                axs.add_patch(circle)
+    baseSeg = outsideClipSegmentToCircle(bigP,bigRsqr,Segment(bigP,bigP+diff))
+    assert(len(baseSeg) == 2)
+    seg = outsideClipSegmentToCircle(smallP,smallRsqr,Segment(baseSeg[0],baseSeg[1]))
+    if len(seg) == 0:
+        return []
+    assert(len(seg) != 1)
 
-        rays = []
-        for i,j in trianglebases:
-            diff = points[j]-points[i]
-            orth = Point(zero-diff.y(),diff.x())
-            if onWhichSide(Segment(points[i],points[j]), points[i] + orth) != "left":
-                orth = orth.scale(FieldNumber(-1))
-            rays.append(Segment(points[i],points[i]+orth))
-            rays.append(Segment(points[j],points[j]+orth))
-            if axs != None:
-                axs.plot([numericPoint(points[i])[0],numericPoint(points[i]+orth)[0]],[numericPoint(points[i])[1],numericPoint(points[i]+orth)[1]],color="blue")
-                axs.plot([numericPoint(points[j])[0],numericPoint(points[j]+orth)[0]],[numericPoint(points[j])[1],numericPoint(points[j]+orth)[1]],color="blue")
+    left = seg[0]
+    right = seg[1]
 
-        seg = Segment(points[constraintA],points[constraintB])
-        intervalSet = [[FieldNumber(0),FieldNumber(1)]]
-        for c,rsq in circles:
-            inters = outsideIntersectionsSegmentCircle(c,rsq,seg)
-            if len(inters) <= 1:
-                if inCircle(c,rsq,seg.source()) == "inside":
-                    inters.append(seg.source())
-                if inCircle(c,rsq,seg.target()) == "inside":
-                    inters.append(seg.target())
-            assert(len(inters) <= 2)
-            if len(inters)==2:
-                interval = []
-                for p in inters:
-                    interval.append(getParamOfPointOnSegment(seg,p))
-                interval = np.array(interval,dtype=FieldNumber)
-                interval = np.sort(interval)
-                if axs != None:
-                    s,t = interval
-                    sPoint = seg.source() + (seg.target()-seg.source()).scale(s)
-                    tPoint = seg.source() + (seg.target()-seg.source()).scale(t)
-                    axs.scatter([numericPoint(sPoint)[0],numericPoint(tPoint)[0]],[numericPoint(sPoint)[1],numericPoint(tPoint)[1]],marker=".",color="green")
-                #now intersect intervalSet with interval
-                newIntervalSet = []
-                for oldInterval in intervalSet:
-                    if interval[0] < oldInterval[0] and oldInterval[1] < interval[1]:
-                        continue
-                    elif  oldInterval[0] <= interval[0] and oldInterval[1] < interval[1]:
-                        newIntervalSet.append([oldInterval[0],min(interval[0],oldInterval[1])])
-                    elif interval[0] < oldInterval[0] and interval[1] <= oldInterval[1]:
-                        newIntervalSet.append([max(interval[1],oldInterval[0]),oldInterval[1]])
-                    elif  oldInterval[0] <= interval[0] and  interval[1] <= oldInterval[1]:
-                        newIntervalSet.append([oldInterval[0],interval[0]])
-                        newIntervalSet.append([interval[1],oldInterval[1]])
-                    else:
-                        newIntervalSet.append(oldInterval)
-                intervalSet = newIntervalSet
-            else:
-                #tangent
-                continue
-
-        testers = []
-        for interval in intervalSet:
-            testers.append(interval[0])
-            testers.append(interval[1])
-
-        for ray in rays:
-            inter = supportingRayIntersectSegment(ray,seg)
-            if inter != None:
-                t = getParamOfPointOnSegment(seg,inter)
-                for interval in intervalSet:
-                    if interval[0] <= t <= interval[1]:
-                        testers.append(t)
-
-        testers = np.sort(testers)
-        result = []
-        for i in range(len(testers)-1):
-            nextI = i+1
-            s = testers[i]
-            t = testers[nextI]
-            mid = onehalf*(s+t)
-            #check again, that mid is in some interval
-            isIn = False
-            for interval in intervalSet:
-                if interval[0] <= mid <= interval[1]:
-                    isIn = True
-                    break
-            if not isIn:
-                continue
-            q = seg.source() + (seg.target()-seg.source()).scale(mid)
-            if axs != None:
-                sPoint = seg.source() + (seg.target()-seg.source()).scale(s)
-                tPoint = seg.source() + (seg.target()-seg.source()).scale(t)
-                axs.scatter([numericPoint(sPoint)[0],numericPoint(tPoint)[0]],[numericPoint(sPoint)[1],numericPoint(tPoint)[1]],color="blue",zorder=1000)
-                axs.scatter([numericPoint(q)[0]],[numericPoint(q)[1]],color="green",zorder=1000)
-            isGood = True
-            zeroVol = 0
-            for i,j in trianglebases:
-                if colinear(Segment(points[i],points[j]), q) and (i == constraintA or i == constraintB or j == constraintA or j == constraintB):
-                    zeroVol += 1
-                    if zeroVol > 1:
-                        isGood = False
-                        break
-                elif isBadTriangle(q,points[i],points[j]):
-                    isGood = False
-                    break
-            if isGood:
-                if axs != None:
-                    axs.scatter([numericPoint(q)[0]],[numericPoint(q)[1]],marker = "*",color="red",zorder=1000)
-                if len(result) == 0:
-                    result.append([s,t])
-                else:
-                    if result[-1][1] == s:
-                        result[-1] = [result[-1][0],t]
-                    else:
-                        result.append([s,t])
-        return result
-    else:
+    if inCircle(bigP, bigRsqr, left) == "inside" and inCircle(bigP, bigRsqr, right) == "inside":
         return []
 
-def getCenterOfLinkConstrainedProjection(points,conA,conB,intervals,num=[],axs=None):
-    # get orientation
-    onlyLeft = True
-    onlyRight = True
-    if axs != None:
-        axs.clear()
+    while(distsq(left,right) > (FieldNumber(1)/FieldNumber(acc))):
+        mid = (left+right).scale(onehalf)
+        if bigRsqr - dot(bigP-mid,bigP-mid) > smallRsqr - dot(smallP-mid,smallP-mid):
+            left = mid
+        else:
+            right = mid
 
-    for i in range(len(points)):
-        a = points[i]
-        b = points[(i + 1) % len(points)]
-        c = points[(i + 2) % len(points)]
-        side = onWhichSide(Segment(a, b), c)
-        if side == "left":
-            onlyRight = False
-        elif side == "right":
-            onlyLeft = False
-
-    if (onlyLeft == False) and (onlyRight == False):
+    if distsq(bigP,left) > bigRsqr or distsq(smallP,right) > smallRsqr:
         return []
 
-    if onlyRight:
-        flippedIntervals = []
-        for interval in intervals:
-            flippedIntervals.append([FieldNumber(1)-interval[1],FieldNumber(1)-interval[0]])
-        return getCenterOfLinkConstrainedProjection(list(reversed(points)),len(points) - 1 - conB, len(points) - 1 - conA, flippedIntervals, num, axs)
-    elif onlyLeft:
+    orth1 = Point(diff.y(),zero - diff.x())
+    orth2 = Point(zero - diff.y(),diff.x())
+    seg1 = Segment(left+orth1,left+orth2)
+    seg2 = Segment(right+orth1,right+orth2)
+    sols = []
+    for p in outsideIntersectionsSegmentCircle(bigP,bigRsqr,seg1):
+        sols.append(p)
+    for p in outsideIntersectionsSegmentCircle(smallP,smallRsqr,seg1):
+        sols.append(p)
+    for p in insideIntersectionsSegmentCircle(smallP,smallRsqr,seg1):
+        sols.append(p)
+    for p in outsideIntersectionsSegmentCircle(smallP,smallRsqr,seg2):
+        sols.append(p)
+    for p in insideIntersectionsSegmentCircle(smallP,smallRsqr,seg2):
+        sols.append(p)
 
+    return sols
 
-        seg = Segment(points[conA],points[conB])
-
-        trianglebases = []
-        for i in range(len(points)):
-            nextI = (i+1)%len(points)
-            if (i == conA and nextI == conB) or (i == conB and nextI == conA):
-                continue
-            else:
-                trianglebases.append([i,nextI])
-                if axs != None:
-                    axs.plot([numericPoint(points[j])[0] for j in [i,nextI]],[numericPoint(points[j])[1] for j in [i,nextI]],color="black")
-        for s,t in intervals:
-            sPoint = seg.source() + (seg.target()-seg.source()).scale(s)
-            tPoint = seg.source() + (seg.target()-seg.source()).scale(t)
-
-            axs.scatter([numericPoint(sPoint)[0],numericPoint(tPoint)[0]],[numericPoint(sPoint)[1],numericPoint(tPoint)[1]],color="blue",zorder=1000)
-            axs.plot([numericPoint(sPoint)[0],numericPoint(tPoint)[0]],[numericPoint(sPoint)[1],numericPoint(tPoint)[1]],color="blue",zorder=1000)
-
-        circles = []
-        for i,j in trianglebases:
-            c = (points[i]+points[j]).scale(onehalf)
-            rsq = distsq(c,points[j])
-            circles.append([c,rsq])
-            if axs != None:
-                circle = plt.Circle((numericPoint(c)[0],numericPoint(c)[1]), np.sqrt(float(rsq)), color="yellow", fill=False, zorder=1000)
-                axs.add_patch(circle)
-
-        rays = []
-        for i,j in trianglebases:
-            diff = points[j]-points[i]
-            orth = Point(zero-diff.y(),diff.x())
-            if onWhichSide(Segment(points[i],points[j]), points[i] + orth) != "left":
-                orth = orth.scale(FieldNumber(-1))
-            startRay = Segment(points[i], points[i] + orth)
-            endRay = Segment(points[j], points[j] + orth)
-            for offset in range(len(points)):
-                qId = (j+offset)%len(points)
-                nextQId = (qId+1)%len(points)
-                if onWhichSide(endRay,points[qId]) != "left" and onWhichSide(endRay,points[nextQId]) == "left":
-                    inter = supportingRayIntersectSegment(endRay,Segment(points[qId],points[nextQId]))
-                    assert(inter != None)
-                    rays.append(Segment(endRay.source(),inter))
-                    axs.plot([numericPoint(rays[-1].source())[0], numericPoint(rays[-1].target())[0]],
-                     [numericPoint(rays[-1].source())[1], numericPoint(rays[-1].target())[1]], color="blue")
-                    break
-
-            for offset in reversed(range(len(points))):
-                qId = (i+offset)%len(points)
-                nextQId = (qId+(len(points)-1))%len(points)
-                if onWhichSide(startRay,points[qId]) != "right" and onWhichSide(startRay,points[nextQId]) == "right":
-                    inter = supportingRayIntersectSegment(startRay,Segment(points[qId],points[nextQId]))
-                    assert(inter != None)
-                    rays.append(Segment(startRay.source(),inter))
-
-                    axs.plot([numericPoint(rays[-1].source())[0],numericPoint(rays[-1].target())[0]],[numericPoint(rays[-1].source())[1],numericPoint(rays[-1].target())[1]],color="blue")
-                    break
-            #axs.plot([numericPoint(points[j])[0],numericPoint(points[j]+orth)[0]],[numericPoint(points[j])[1],numericPoint(points[j]+orth)[1]],color="blue")
-
-        #there are also rays for every interval
-        seg = Segment(points[conA], points[conB])
-        for interval in intervals:
-            diff = seg.target() - seg.source()
-            orth = Point(zero - diff.y(), diff.x())
-            if onWhichSide(seg, seg.source() + orth) != "left":
-                orth = orth.scale(FieldNumber(-1))
-            s,t = interval
-            tPoint = seg.source() + (seg.target()-seg.source()).scale(t)
-            endRay = Segment(tPoint, tPoint + orth)
-            for offset in range(len(points)):
-                qId = offset % len(points)
-                nextQId = (qId + 1) % len(points)
-                if (qId == conA and nextQId == conB) or (qId == conB and nextQId == conA):
-                    continue
-                if onWhichSide(endRay, points[qId]) != "left" and onWhichSide(endRay, points[nextQId]) == "left":
-                    inter = supportingRayIntersectSegment(endRay, Segment(points[qId], points[nextQId]))
-                    assert (inter != None)
-                    rays.append(Segment(endRay.source(), inter))
-                    axs.plot([numericPoint(rays[-1].source())[0], numericPoint(rays[-1].target())[0]],
-                             [numericPoint(rays[-1].source())[1], numericPoint(rays[-1].target())[1]], color="blue")
-                    break
-
-            sPoint = seg.source() + (seg.target() - seg.source()).scale(s)
-            startRay = Segment(sPoint, sPoint + orth)
-            for offset in reversed(range(len(points))):
-                qId = (0 + offset) % len(points)
-                nextQId = (qId + (len(points) - 1)) % len(points)
-                if (qId == conA and nextQId == conB) or (qId == conB and nextQId == conA):
-                    continue
-                if onWhichSide(startRay, points[qId]) != "right" and onWhichSide(startRay, points[nextQId]) == "right":
-                    inter = supportingRayIntersectSegment(startRay, Segment(points[qId], points[nextQId]))
-                    assert (inter != None)
-                    rays.append(Segment(startRay.source(), inter))
-
-                    axs.plot([numericPoint(rays[-1].source())[0], numericPoint(rays[-1].target())[0]],
-                             [numericPoint(rays[-1].source())[1], numericPoint(rays[-1].target())[1]], color="blue")
-                    break
-        candidatePoints = []
-        for i in range(len(rays)):
-            for j in range(i+1,len(rays)):
-                if (inter := innerIntersect(rays[i].source(),rays[i].target(),rays[j].source(),rays[j].target()) )is not None:
-                    candidatePoints.append(inter)
-
-        for ray in rays:
-            for c,rsq in circles:
-                if (inters := outsideIntersectionsSegmentCircle(c,rsq,ray)) is not None:
-                    for inter in inters:
-                        candidatePoints.append(inter)
-
-        insideCandidatePoints = [[] for _ in intervals]
-        for cp in candidatePoints:
-            ap = altitudePoint(seg,cp)
-            t = getParamOfPointOnSegment(seg,ap)
-            if t < zero or t > FieldNumber(1):
-                continue
-            for i in range(len(intervals)):
-                interval = intervals[i]
-                if interval[0] <= t <= interval[1]:
-                    insideCandidatePoints[i].append(cp)
-                    break
-
-        insidePoints = [[] for _ in intervals]
-        for i in range(len(insideCandidatePoints)):
-            for icp in insideCandidatePoints[i]:
-                isGood = True
-                for a,b in trianglebases:
-                    if isBadTriangle(icp,points[a],points[b]):
-                        isGood = False
-                        break
-                if isGood:
-                    insidePoints[i].append(icp)
-
-        #construct centroids
-        solutions = []
-        for i in range(len(insidePoints)):
-            centroid = Point(zero,zero)
-            count = 0
-            for ip in insidePoints[i]:
-                centroid += ip
-                count += 1
-            if count != 0:
-                centroid = centroid.scale(FieldNumber(1)/FieldNumber(count))
-                centroid = roundExact(centroid)
-                isGood = False
-                ap = altitudePoint(seg, centroid)
-                t = getParamOfPointOnSegment(seg, ap)
-                if t < zero or t > FieldNumber(1):
-                    continue
-                for i in range(len(intervals)):
-                    interval = intervals[i]
-                    if interval[0] <= t <= interval[1]:
-                        isGood = True
-                        break
-                if isGood:
-                    for a,b in trianglebases:
-                        if isBadTriangle(centroid,points[a],points[b]):
-                            isGood = False
-                            break
-                if isGood:
-                    solutions.append(centroid)
-
-        for ips in insidePoints:
-            for ip in ips:
-                solutions.append(ip)
-
-        return solutions
 
 
 
