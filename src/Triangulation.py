@@ -2352,7 +2352,7 @@ class QualityImprover:
             logging.debug("completed updating Geometric problems")
             logging.debug("drawing...")
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
-            if plotUpdater == 5:
+            if plotUpdater == 1:
                 #self.tri.plotCoordinateQuality()
                 self.tri.plotTriangulation()
                 plotUpdater = 0

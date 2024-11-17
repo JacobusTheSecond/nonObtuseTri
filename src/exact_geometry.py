@@ -1236,12 +1236,26 @@ def getCircleIntersections(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc
     baseSeg = outsideClipSegmentToCircle(bigP,bigRsqr,Segment(bigP,bigP+diff))
     assert(len(baseSeg) == 2)
     seg = outsideClipSegmentToCircle(smallP,smallRsqr,Segment(baseSeg[0],baseSeg[1]))
+    sols = []
     if len(seg) == 0:
         return []
-    assert(len(seg) != 1)
+    left = None
+    right = None
+    if len(seg) == 1:
+        bounder = roundExactOnSegmentBounder(Segment(bigP,smallP),seg[0])
+        left = bounder[0]
+        right = bounder[0]
+        for p in bounder:
+            if dot(bigP-p,bigP-p) < dot(bigP-left,bigP-left):
+                left = p
+            if dot(smallP-p,smallP-p) < dot(smallP-right,smallP-right):
+                right = p
+        sols.append(seg[0])
+    elif len(seg) == 2:
 
-    left = seg[0]
-    right = seg[1]
+
+        left = seg[0]
+        right = seg[1]
 
     if inCircle(bigP, bigRsqr, left) == "inside" and inCircle(bigP, bigRsqr, right) == "inside":
         return []
@@ -1260,7 +1274,6 @@ def getCircleIntersections(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc
     orth2 = Point(zero - diff.y(),diff.x())
     seg1 = Segment(left+orth1,left+orth2)
     seg2 = Segment(right+orth1,right+orth2)
-    sols = []
     for p in outsideIntersectionsSegmentCircle(bigP,bigRsqr,seg1):
         sols.append(p)
     for p in outsideIntersectionsSegmentCircle(smallP,smallRsqr,seg1):
