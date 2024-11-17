@@ -1250,7 +1250,7 @@ def getCircleIntersections(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc
                 left = p
             if dot(smallP-p,smallP-p) < dot(smallP-right,smallP-right):
                 right = p
-        sols.append(seg[0])
+        #sols.append(seg[0])
     elif len(seg) == 2:
 
 
