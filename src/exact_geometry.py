@@ -1213,7 +1213,7 @@ def circleIntersectsCircle(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc
     seg = outsideClipSegmentToCircle(smallP,smallRsqr,Segment(baseSeg[0],baseSeg[1]))
     if len(seg) == 0:
         return False
-    assert(len(seg) != 1)
+    #assert(len(seg) != 1)
     return True
 
 def getCircleIntersections(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc=10):

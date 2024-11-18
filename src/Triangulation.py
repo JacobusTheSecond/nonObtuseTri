@@ -157,6 +157,7 @@ class Triangulation:
         self.geometricFaceProblems = []
         self.geometricLinkProblems = []
         self.geometricCircleProblems = []
+        self.geometricSegmentProblems = []
         self.updateGeometricProblems()
 
     ####
@@ -636,6 +637,54 @@ class Triangulation:
     def updateGeometricFaceProblems(self):
         pass
 
+    def updateGeometricSegmentProblems(self):        # remove all geometric problems, whose face set has experienced a change
+        for gpiIdx in reversed(range(len(self.geometricSegmentProblems))):
+            hasToBeRemoved = False
+            for triIdx in self.geometricSegmentProblems[gpiIdx].triIdxs:
+                if self.triangleChanged[triIdx]:
+                    hasToBeRemoved = True
+                    break
+            if hasToBeRemoved:
+                self.geometricSegmentProblems.pop(gpiIdx)
+
+        topoDisks = set()
+        for gp in self.geometricCircleProblems:
+            topoDisks.add(tuple(list(sorted(gp.triIdxs))))
+
+        for triIdx in self.validTriIdxs():
+            for internal in range(3):
+                if self.triangleMap[triIdx,internal,2] != noneEdge and self.edgeTopologyChanged[triIdx,internal]:
+                    #prevent doublecounting
+                    if self.triangleMap[triIdx,internal,0] > triIdx:
+                        segTopoDisks = self.getAllSegmentDisks(triIdx, internal)
+                        for disk in segTopoDisks:
+                            if disk not in topoDisks:
+                                gp = self.getGeometricSubproblemFromTopoDisk(disk)
+                                if gp is not None:
+                                    gp.gpType = "segmentTopoDisk"
+                                    self.geometricCircleProblems.append(gp)
+                                topoDisks.add(disk)
+        logging.info("Number of topological segment disk problems: " + str(len(topoDisks)))
+
+                        #lDisks = self.getAllTruncatedCirclesIntersecting(triIdx)
+                        #rDisk = None
+                        #if self.triangleMap[triIdx,internal,0] != outerFace:
+                        #    rDisk = self.getAllTruncatedCirclesIntersecting(self.triangleMap[triIdx,internal,0])
+
+        # add all changed bad triangles
+        #for triIdx in np.where(self.triangleChanged)[0]:
+        #    if self.isValidTriangle[triIdx] and self.badTris[triIdx]:
+        #        triTopoDisks = self.getAllTriangleDisks(triIdx)
+        #        for disk in triTopoDisks:
+        #            if disk not in topoDisks:
+        #                gp = self.getGeometricSubproblemFromTopoDisk(disk)
+        #                if gp is not None:
+        #                    self.geometricCircleProblems.append(gp)
+        #                topoDisks.add(disk)
+        #    logging.info("Number of topological disk problems: " + str(len(topoDisks)))
+
+        #self.rebaseTriangleState()
+
     def updateGeometricLinkProblems(self):
         # remove all geometric problems, whose face set has experienced a change
         for gpiIdx in reversed(range(len(self.geometricLinkProblems))):
@@ -691,18 +740,19 @@ class Triangulation:
                         if gp is not None:
                             self.geometricCircleProblems.append(gp)
                         topoDisks.add(disk)
-            logging.info("Number of topological disk problems: " + str(len(topoDisks)))
+        logging.info("Number of topological disk problems: " + str(len(topoDisks)))
 
         self.rebaseTriangleState()
 
 
     def updateGeometricProblems(self):
         self.updateGeometricFaceProblems()
+        self.updateGeometricSegmentProblems()
         self.updateGeometricLinkProblems()
         self.updateGeometricCircleProblems()
 
     def geometricSubproblemIterator(self):
-        return itertools.chain(self.geometricFaceProblems,self.geometricLinkProblems,self.geometricCircleProblems)
+        return itertools.chain(self.geometricCircleProblems,self.geometricSegmentProblems,self.geometricFaceProblems,self.geometricLinkProblems)
 
     def flipEdge(self, triIdx, iVIdx):
         triA = self.triangles[triIdx]
@@ -1327,7 +1377,7 @@ class Triangulation:
             return GeometricSubproblem(vIdxs, insideFaces, link, self.exactVerts[list(vIdxs) + list(link)],
                                    self.numericVerts[list(vIdxs) + list(link)], self.segments[insideConstraints],
                                    self.segments[boundaryConstraints], boundaryConstraintTypes, self.instanceSize,
-                                   numBad,numBoundaryDroppers,None, self.gpaxs)
+                                   numBad,numBoundaryDroppers,"enclosement",None, self.gpaxs)
         else:
             logging.debug("Enclosement with seed "+str(vIdxs)+" produced non-trivial homotopytype...")
             return None
@@ -1349,7 +1399,7 @@ class Triangulation:
                     numBad -= 1
         return GeometricSubproblem([], [triIdx], tri, self.exactVerts[tri], self.numericVerts[tri], [],
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
-                                   numBad,numBoundaryDroppers,None, self.gpaxs)
+                                   numBad,numBoundaryDroppers,"face",None, self.gpaxs)
 
     def removePoint(self,vIdx):
         #safely unlinks
@@ -2115,7 +2165,7 @@ class Triangulation:
             return "on",np.argwhere(sides == "colinear")
         return "outside",noneIntervalVertex
 
-    def getAllTriangleDisks(self,triIdx):
+    def getAllTruncatedCirclesIntersecting(self,triIdx):
         #first figure out all triangles that intersect the circumcenter of triIdx
         myCC = self.circumcenter(triIdx)
         myCRsqr = self.circumRadiiSqr[triIdx]
@@ -2153,15 +2203,85 @@ class Triangulation:
                                     break
                             if (not intersectsEdge) and (next not in tried):
                                 actionstack.append(next)
-        #for i in intersecting:
-        #    cc = self.circumcenter(i)
-        #    cr = self.circumRadiiSqr[i]
-        #    self.axs.set_aspect("equal")
-        #    self.axs.scatter([float(cc[0])], [float(cc[1])], marker='.', color='yellow', zorder=1000)
-        #    circle = plt.Circle((float(cc[0]), float(cc[1])), np.sqrt(float(cr)),
-        #                        color="yellow", fill=False, zorder=1000)
-        #    self.axs.add_patch(circle)
-        #    plt.draw()
+        return intersecting
+
+    def getAllSegmentDisks(self,triIdx,internal):
+        lDisks = self.getAllTruncatedCirclesIntersecting(triIdx)
+        llimitingEdges,llimitingSegments = self.getSegmentsIntersectingCircumCircle(triIdx)
+        rDisks = None
+        rlimitingEdges,rlimitingSegments = None,None
+        if (oppF := self.triangleMap[triIdx,internal,0]) != outerFace:
+            rDisks = self.getAllTruncatedCirclesIntersecting(oppF)
+            rlimitingEdges,rlimitingSegments = self.getSegmentsIntersectingCircumCircle(oppF)
+        disks = list(set(lDisks+rDisks)) if rDisks != None else lDisks
+        limitingEdges = llimitingEdges+rlimitingEdges if rDisks != None else llimitingEdges
+        limitingSegments = llimitingSegments+rlimitingSegments if rDisks != None else llimitingSegments
+
+        querySeg = Segment(self.point(self.triangles[triIdx,(internal+1)%3]),self.point(self.triangles[triIdx,(internal+2)%3]))
+
+        for i in reversed(range(len(limitingSegments))):
+            if limitingSegments[i].source() == querySeg.source() and limitingSegments[i].target() == querySeg.target():
+                limitingSegments.pop(i)
+                limitingEdges.pop(i)
+
+            elif limitingSegments[i].target() == querySeg.source() and limitingSegments[i].source() == querySeg.target():
+                limitingSegments.pop(i)
+                limitingEdges.pop(i)
+
+        queryPoints = [(querySeg.source()+querySeg.target()).scale(eg.onehalf)]
+        for dIdx in disks:
+            cc = self.circumcenter(dIdx)
+            cr = self.circumRadiiSqr[dIdx]
+            if eg.segmentIntersectsCircle(cc,cr,querySeg):
+                possiblePoints = eg.insideIntersectionsSegmentCircle(cc,cr,querySeg) + eg.outsideIntersectionsSegmentCircle(cc,cr,querySeg)
+                for p in possiblePoints:
+                    if p == querySeg.source():
+                        continue
+                    if p == querySeg.target():
+                        continue
+                    alreadyInQPs = False
+                    for qp in queryPoints:
+                        if qp == p:
+                            alreadyInQPs = True
+                            break
+                    if alreadyInQPs:
+                        continue
+                    queryPoints.append(p)
+        topoDisks = set()
+        for q in queryPoints:
+            topoDisk = []
+            for i in disks:
+                if eg.inCircle(self.circumcenter(i), self.circumRadiiSqr[i], q) != "outside":
+                    intersectsEdge = False
+                    for otherI in range(3):
+                        for e, s in zip(limitingEdges, limitingSegments):
+                            if self.triangles[i, otherI] in self.segments[self.triangleMap[e[0][0], e[0][1], 2]]:
+                                continue
+                            if eg.innerIntersect(q, self.point(self.triangles[i, otherI]), s.source(), s.target(),
+                                                 False, False):
+                                intersectsEdge = True
+                                break
+                        if intersectsEdge:
+                            break
+                    if intersectsEdge:
+                        continue
+                    topoDisk.append(i)
+            topoDisk = tuple(list(sorted(topoDisk)))
+            topoDisks.add(topoDisk)
+        return topoDisks
+
+
+
+
+    def getAllTriangleDisks(self,triIdx):
+        #first figure out all triangles that intersect the circumcenter of triIdx
+        myCC = self.circumcenter(triIdx)
+        myCRsqr = self.circumRadiiSqr[triIdx]
+        mIds = self.triangles[triIdx]
+        limitingEdges,limitingSegments = self.getSegmentsIntersectingCircumCircle(triIdx)
+
+        intersecting = self.getAllTruncatedCirclesIntersecting(triIdx)
+
         queryPoints = []
         for i in range(len(intersecting)):
             for j in range(i+1,len(intersecting)):
@@ -2204,6 +2324,7 @@ class Triangulation:
         boundary = [[topoDisk[0],i] for i in range(3)]
         expanded = [topoDisk[0]]
         changed = True
+        segmentIds = []
         while changed:
             changed = False
             for i in range(len(boundary)):
@@ -2225,6 +2346,8 @@ class Triangulation:
                         boundary = boundary[:i] + nexttwo + boundary[i+1:]
                     changed = True
                     expanded.append(nextF)
+                    if (segId := self.triangleMap[boundaryedge[0],boundaryedge[1],2]) != noneEdge:
+                        segmentIds.append(segId)
                     break
         #build link
         next = None
@@ -2263,20 +2386,9 @@ class Triangulation:
                     numBoundaryDroppers += 1
                     numBad -= 1
 
-        return GeometricSubproblem([], topoDisk, link, self.exactVerts[link], self.numericVerts[link], [],
+        return GeometricSubproblem([], topoDisk, link, self.exactVerts[link], self.numericVerts[link],  self.segments[segmentIds],
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
-                                   numBad,numBoundaryDroppers, 0, self.gpaxs)
-
-
-
-
-        #print(boundary)
-
-
-
-
-
-
+                                   numBad,numBoundaryDroppers, "topoDisk",0, self.gpaxs)
 
 
     def combinatorialDepth(self):
@@ -2356,6 +2468,7 @@ class QualityImprover:
             self.tri.updateGeometricProblems()
             np.random.shuffle(self.tri.geometricLinkProblems)
             np.random.shuffle(self.tri.geometricCircleProblems)
+            np.random.shuffle(self.tri.geometricSegmentProblems)
             logging.debug("completed updating Geometric problems")
             logging.debug("drawing...")
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
@@ -2514,7 +2627,7 @@ class QualityImprover:
                 if self.tri.gpaxs != None:
                     replacer.plotMe()
                 # lastEdit = curEdit
-                logging.info("replacing identified subproblem")
+                logging.info("replacing identified subproblem of type "+replacer.gpType)
                 self.tri.replaceEnclosement(replacer, bestSol)
                 logging.info("done replacing")
                 self.tri.validateTriangleMap()

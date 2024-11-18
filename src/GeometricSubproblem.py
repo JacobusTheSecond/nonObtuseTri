@@ -8,7 +8,7 @@ from cgshop2025_pyutils.geometry import Point, Segment, FieldNumber, intersectio
 
 class GeometricSubproblem:
     def __init__(self, vIdxs, triIdxs, boundary, exactPoints, numericPoints, innerCons, boundaryCons, boundaryType,
-                 steinercutoff, numBadTris,numBoundaryDroppers, maxTolerance=None, axs=None):
+                 steinercutoff, numBadTris,numBoundaryDroppers, gpType ="None", maxTolerance=None, axs=None):
         # some housekeeping to have some handle on what to delete later
 
         # lets make this better
@@ -18,6 +18,7 @@ class GeometricSubproblem:
         self.numericVerts = numericPoints
         self.numBadTris = numBadTris
         self.numBoundaryDroppers = numBoundaryDroppers
+        self.gpType = gpType
         if maxTolerance is None:
             self.tolerance = 1000
         else:
