@@ -737,7 +737,7 @@ class Triangulation:
         # add all changed bad triangles
         nonSuperseeded = self.getNonSuperseededBadTris()
         for triIdx in np.where(self.triangleChanged)[0]:
-            if self.isValidTriangle[triIdx] and triIdx in nonSuperseeded:
+            if self.isValidTriangle[triIdx] and self.badTris[triIdx] and triIdx in nonSuperseeded:
                 triTopoDisks = self.getAllTriangleDisks(triIdx)
                 for disk in triTopoDisks:
                     if disk not in topoDisks:
@@ -752,7 +752,7 @@ class Triangulation:
 
     def updateGeometricProblems(self):
         self.updateGeometricFaceProblems()
-        self.updateGeometricSegmentProblems()
+        #self.updateGeometricSegmentProblems()
         self.updateGeometricLinkProblems()
         self.updateGeometricCircleProblems()
 
