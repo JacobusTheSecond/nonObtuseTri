@@ -687,7 +687,9 @@ class Triangulation:
                 triTopoDisks = self.getAllTriangleDisks(triIdx)
                 for disk in triTopoDisks:
                     if disk not in topoDisks:
-                        self.geometricCircleProblems.append(self.getGeometricSubproblemFromTopoDisk(disk))
+                        gp = self.getGeometricSubproblemFromTopoDisk(disk)
+                        if gp is not None:
+                            self.geometricCircleProblems.append(gp)
                         topoDisks.add(disk)
             logging.info("Number of topological disk problems: " + str(len(topoDisks)))
 
@@ -2200,6 +2202,7 @@ class Triangulation:
         #assumption here is, that there is no vertex on the inside. Maybe this assumption ought to be dropped lateron
         topoDisk = list(topoDisk)
         boundary = [[topoDisk[0],i] for i in range(3)]
+        expanded = [topoDisk[0]]
         changed = True
         while changed:
             changed = False
@@ -2210,6 +2213,9 @@ class Triangulation:
                 if self.triangleMap[boundaryedge[0],boundaryedge[1],0] in topoDisk:
                     #need to replace this boundarypiece
                     nextF,nextI = self.triangleMap[boundaryedge[0],boundaryedge[1],0],self.triangleMap[boundaryedge[0],boundaryedge[1],1]
+                    if nextF in expanded:
+                        logging.error("circle expansion detected...")
+                        return None
                     nexttwo = [[nextF,(nextI+1)%3],[nextF,(nextI+2)%3]]
                     if self.triangles[nexttwo[0][0],nexttwo[0][1]] not in nextedgeAsIdxs:
                         nexttwo = nexttwo[::-1]
@@ -2218,6 +2224,7 @@ class Triangulation:
                     else:
                         boundary = boundary[:i] + nexttwo + boundary[i+1:]
                     changed = True
+                    expanded.append(nextF)
                     break
         #build link
         next = None
