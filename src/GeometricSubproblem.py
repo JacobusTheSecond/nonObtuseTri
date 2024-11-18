@@ -324,7 +324,7 @@ class StarSolver:
                     isGood = False
                     break
 
-            if (len([c for c, rsq in gp.guaranteeOutside if eg.inCircle(c, rsq, q) != "outside"]) <= self.outsideTolerance):
+            if (len([c for c, rsq in gp.guaranteeOutside if eg.inCircle(c, rsq, q) != "outside"]) > self.outsideTolerance):
                 isGood = False
             if isGood:
                 if len(goodIntervals) == 0:
