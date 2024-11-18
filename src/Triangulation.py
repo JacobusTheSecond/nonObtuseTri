@@ -1377,7 +1377,7 @@ class Triangulation:
             return GeometricSubproblem(vIdxs, insideFaces, link, self.exactVerts[list(vIdxs) + list(link)],
                                    self.numericVerts[list(vIdxs) + list(link)], self.segments[insideConstraints],
                                    self.segments[boundaryConstraints], boundaryConstraintTypes, self.instanceSize,
-                                   numBad,numBoundaryDroppers,"enclosement",None, self.gpaxs)
+                                   numBad,numBoundaryDroppers,None,"enclosement",None, self.gpaxs)
         else:
             logging.debug("Enclosement with seed "+str(vIdxs)+" produced non-trivial homotopytype...")
             return None
@@ -1399,7 +1399,7 @@ class Triangulation:
                     numBad -= 1
         return GeometricSubproblem([], [triIdx], tri, self.exactVerts[tri], self.numericVerts[tri], [],
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
-                                   numBad,numBoundaryDroppers,"face",None, self.gpaxs)
+                                   numBad,numBoundaryDroppers,None,"face",None, self.gpaxs)
 
     def removePoint(self,vIdx):
         #safely unlinks
@@ -2304,7 +2304,7 @@ class Triangulation:
                             if self.triangles[i, otherI] in self.segments[self.triangleMap[e[0][0], e[0][1], 2]]:
                                 continue
                             if eg.innerIntersect(q,self.point(self.triangles[i, otherI]), s.source(), s.target(),
-                                                 False, False):
+                                                 True, True):
                                 intersectsEdge = True
                                 break
                         if intersectsEdge:
@@ -2386,9 +2386,19 @@ class Triangulation:
                     numBoundaryDroppers += 1
                     numBad -= 1
 
+        outsideIds = []
+        for face in topoDisk:
+            for internal in range(3):
+                if (nId := self.triangleMap[face,internal,0]) != outerFace and (nId not in topoDisk) and (nId not in outsideIds):
+                    outsideIds.append(self.triangleMap[face,internal,0])
+
+        outside = []
+        for face in outsideIds:
+            outside.append([self.circumcenter(face),self.circumRadiiSqr[face]])
+
         return GeometricSubproblem([], topoDisk, link, self.exactVerts[link], self.numericVerts[link],  self.segments[innerSegmentIds],
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
-                                   numBad,numBoundaryDroppers, "topoDisk",0, self.gpaxs)
+                                   numBad,numBoundaryDroppers, outside,"topoDisk",0, self.gpaxs)
 
 
     def combinatorialDepth(self):
@@ -2414,7 +2424,7 @@ class Triangulation:
 class QualityImprover:
     def __init__(self, tri: Triangulation,seed=None):
         self.tri = tri
-        self.solver = StarSolver(2,1,1,1.25,2,2)
+        self.solver = StarSolver(2,1,1,1.25,2,2,1)
         if seed != None:
             np.random.seed(seed)
         self.seed = seed
@@ -2488,6 +2498,7 @@ class QualityImprover:
             if self.solver.patialTolerance > 0 and round - lastImprovement > 25:
                 self.solver.patialTolerance = max(0,self.solver.patialTolerance - 1)
                 logging.info(f"Tolerance set to {self.solver.patialTolerance}")
+                self.solver.outsideTolerance = min(self.solver.patialTolerance,self.solver.outsideTolerance)
                 lastImprovement = round
                 specialRounds.append(round)
 
@@ -2495,12 +2506,14 @@ class QualityImprover:
             if self.solver.patialTolerance > 1 and len(np.where(self.tri.badTris)[0]) <= max(1, numBadTriHistory[0] // 4):
                 logging.info("Tolerance set to 1")
                 self.solver.patialTolerance = 1
+                self.solver.outsideTolerance = min(self.solver.patialTolerance,self.solver.outsideTolerance)
                 specialRounds.append(round)
 
             #no longer be tolerant when only 5% of bad triangles are left
             if self.solver.patialTolerance > 0 and len(np.where(self.tri.badTris)[0]) <= max(1, numBadTriHistory[0] // 20):
                 logging.info("Tolerance set to 0")
                 self.solver.patialTolerance = 0
+                self.solver.outsideTolerance = min(self.solver.patialTolerance,self.solver.outsideTolerance)
                 specialRounds.append(round)
 
             for gp in self.tri.geometricSubproblemIterator():

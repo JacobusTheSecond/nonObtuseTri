@@ -1287,6 +1287,79 @@ def getCircleIntersections(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc
 
     return sols
 
+def getCircleIntersectionsOutside(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc=10):
+
+    if p == q:
+        return []
+
+    bigP,bigRsqr,smallP,smallRsqr = p,rpsq,q,rqsq
+    if rpsq < rqsq:
+        bigP,bigRsqr,smallP,smallRsqr = q,rqsq,p,rpsq
+
+    diff = smallP - bigP
+    if inCircle(bigP,bigRsqr,bigP+diff)=="inside":
+        if dot(diff,diff) < FieldNumber(1):
+            diff = diff.scale(FieldNumber(1)/dot(diff,diff))
+        if bigRsqr > FieldNumber(1):
+            diff = diff.scale(bigRsqr)
+    assert(inCircle(bigP,bigRsqr,bigP+diff)!="inside")
+
+    baseSeg = outsideClipSegmentToCircle(bigP,bigRsqr,Segment(bigP,bigP+diff))
+    assert(len(baseSeg) == 2)
+    seg = outsideClipSegmentToCircle(smallP,smallRsqr,Segment(baseSeg[0],baseSeg[1]))
+    sols = []
+    if len(seg) == 0:
+        return []
+    left = None
+    right = None
+    if len(seg) == 1:
+        bounder = roundExactOnSegmentBounder(Segment(bigP,smallP),seg[0])
+        left = bounder[0]
+        right = bounder[0]
+        for p in bounder:
+            if dot(bigP-p,bigP-p) < dot(bigP-left,bigP-left):
+                left = p
+            if dot(smallP-p,smallP-p) < dot(smallP-right,smallP-right):
+                right = p
+        #sols.append(seg[0])
+    elif len(seg) == 2:
+
+
+        left = seg[0]
+        right = seg[1]
+
+    if inCircle(bigP, bigRsqr, left) == "inside" and inCircle(bigP, bigRsqr, right) == "inside":
+        return []
+
+    while(distsq(left,right) > (FieldNumber(1)/FieldNumber(acc))):
+        mid = (left+right).scale(onehalf)
+        if bigRsqr - dot(bigP-mid,bigP-mid) > smallRsqr - dot(smallP-mid,smallP-mid):
+            left = mid
+        else:
+            right = mid
+
+    if distsq(bigP,left) > bigRsqr or distsq(smallP,right) > smallRsqr:
+        return []
+
+    orth1 = Point(diff.y(),zero - diff.x())
+    orth2 = Point(zero - diff.y(),diff.x())
+    seg1 = Segment(left+orth1,left+orth2)
+    seg2 = Segment(right+orth1,right+orth2)
+    for p in outsideIntersectionsSegmentCircle(bigP,bigRsqr,seg1):
+        if inCircle(smallP,smallRsqr,p) == "outside":
+            sols.append(p)
+    for p in outsideIntersectionsSegmentCircle(smallP,smallRsqr,seg1):
+        if inCircle(bigP,bigRsqr,p) == "outside":
+            sols.append(p)
+    for p in outsideIntersectionsSegmentCircle(bigP,bigRsqr,seg2):
+        if inCircle(smallP,smallRsqr,p) == "outside":
+            sols.append(p)
+    for p in outsideIntersectionsSegmentCircle(smallP,smallRsqr,seg2):
+        if inCircle(bigP,bigRsqr,p) == "outside":
+            sols.append(p)
+
+    return sols
+
 
 
 
