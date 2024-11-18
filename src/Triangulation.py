@@ -30,7 +30,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = True#self.withValidate
+        self.plotWithIds = self.withValidate
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -651,6 +651,9 @@ class Triangulation:
         for gp in self.geometricCircleProblems:
             topoDisks.add(tuple(list(sorted(gp.triIdxs))))
 
+        nonsuperseeded = self.getNonSuperseededBadTris()
+
+        #TODO: this generator is not exhaustive i think...
         for triIdx in self.validTriIdxs():
             for internal in range(3):
                 if self.triangleMap[triIdx,internal,2] != noneEdge and self.edgeTopologyChanged[triIdx,internal]:
@@ -731,8 +734,10 @@ class Triangulation:
             topoDisks.add(tuple(list(sorted(gp.triIdxs))))
 
         # add all changed bad triangles
+        # add all changed bad triangles
+        nonSuperseeded = self.getNonSuperseededBadTris()
         for triIdx in np.where(self.triangleChanged)[0]:
-            if self.isValidTriangle[triIdx] and self.badTris[triIdx]:
+            if self.isValidTriangle[triIdx] and triIdx in nonSuperseeded:
                 triTopoDisks = self.getAllTriangleDisks(triIdx)
                 for disk in triTopoDisks:
                     if disk not in topoDisks:
@@ -2424,7 +2429,7 @@ class Triangulation:
 class QualityImprover:
     def __init__(self, tri: Triangulation,seed=None):
         self.tri = tri
-        self.solver = StarSolver(2,1,1,1.25,2,2,1)
+        self.solver = StarSolver(2,1,1,1.25,2,2,0)
         if seed != None:
             np.random.seed(seed)
         self.seed = seed
