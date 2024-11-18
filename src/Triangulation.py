@@ -735,9 +735,9 @@ class Triangulation:
 
         # add all changed bad triangles
         # add all changed bad triangles
-        nonSuperseeded = self.getNonSuperseededBadTris()
+        #nonSuperseeded = self.getNonSuperseededBadTris()
         for triIdx in np.where(self.triangleChanged)[0]:
-            if self.isValidTriangle[triIdx] and self.badTris[triIdx] and triIdx in nonSuperseeded:
+            if self.isValidTriangle[triIdx] and self.badTris[triIdx]:# and triIdx in nonSuperseeded:
                 triTopoDisks = self.getAllTriangleDisks(triIdx)
                 for disk in triTopoDisks:
                     if disk not in topoDisks:
@@ -2403,7 +2403,7 @@ class Triangulation:
 
         return GeometricSubproblem([], topoDisk, link, self.exactVerts[link], self.numericVerts[link],  self.segments[innerSegmentIds],
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
-                                   numBad,numBoundaryDroppers, outside,"topoDisk",0, self.gpaxs)
+                                   numBad,numBoundaryDroppers, None,"topoDisk",0, self.gpaxs)
 
 
     def combinatorialDepth(self):
