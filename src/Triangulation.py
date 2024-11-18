@@ -2324,7 +2324,7 @@ class Triangulation:
         boundary = [[topoDisk[0],i] for i in range(3)]
         expanded = [topoDisk[0]]
         changed = True
-        segmentIds = []
+        innerSegmentIds = []
         while changed:
             changed = False
             for i in range(len(boundary)):
@@ -2347,7 +2347,7 @@ class Triangulation:
                     changed = True
                     expanded.append(nextF)
                     if (segId := self.triangleMap[boundaryedge[0],boundaryedge[1],2]) != noneEdge:
-                        segmentIds.append(segId)
+                        innerSegmentIds.append(segId)
                     break
         #build link
         next = None
@@ -2386,7 +2386,7 @@ class Triangulation:
                     numBoundaryDroppers += 1
                     numBad -= 1
 
-        return GeometricSubproblem([], topoDisk, link, self.exactVerts[link], self.numericVerts[link],  self.segments[segmentIds],
+        return GeometricSubproblem([], topoDisk, link, self.exactVerts[link], self.numericVerts[link],  self.segments[innerSegmentIds],
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
                                    numBad,numBoundaryDroppers, "topoDisk",0, self.gpaxs)
 
