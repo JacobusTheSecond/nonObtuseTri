@@ -57,7 +57,7 @@ def solveEveryInstance(solname="cur_solution.zip"):
 
 
     debugSeed = 530702035#754181797#267012647
-    debugIdxs = [26,27]#[125]#[114]#64#7#8#88
+    debugIdxs = [16]#[125]#[114]#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
