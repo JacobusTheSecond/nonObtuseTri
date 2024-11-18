@@ -1,3 +1,4 @@
+import itertools
 import logging
 
 from constants import *
@@ -8,7 +9,7 @@ from cgshop2025_pyutils.geometry import Point, Segment, FieldNumber, intersectio
 
 class GeometricSubproblem:
     def __init__(self, vIdxs, triIdxs, boundary, exactPoints, numericPoints, innerCons, boundaryCons, boundaryType,
-                 steinercutoff, numBadTris,numBoundaryDroppers, gpType ="None", maxTolerance=None, axs=None):
+                 steinercutoff, numBadTris,numBoundaryDroppers,guaranteeOutside=None, gpType ="None", maxTolerance=None, axs=None):
         # some housekeeping to have some handle on what to delete later
 
         # lets make this better
@@ -23,6 +24,10 @@ class GeometricSubproblem:
             self.tolerance = 1000
         else:
             self.tolerance = maxTolerance
+        if guaranteeOutside is None:
+            self.guaranteeOutside = []
+        else:
+            self.guaranteeOutside = guaranteeOutside
 
         self.localMap = np.array(list(vIdxs) + list(boundary))
         self.isSteiner = [False if v < steinercutoff else True for v in self.localMap]
@@ -191,7 +196,7 @@ class GeometricSubproblem:
         return self.localMap[self.insideSteiners]
 
 class StarSolver:
-    def __init__(self,faceWeight,insideSteinerWeight,boundarySteinerWeight,halfInSteinerWeight,unconstrainedSteinerWeight,tolerance,axs=None):
+    def __init__(self,faceWeight,insideSteinerWeight,boundarySteinerWeight,halfInSteinerWeight,unconstrainedSteinerWeight,tolerance,outsideTolerance,axs=None):
         self.faceWeight = faceWeight
         self.insideSteinerWeight = insideSteinerWeight
         self.boundarySteinerWeight = boundarySteinerWeight
@@ -199,6 +204,7 @@ class StarSolver:
         self.unconstrainedSteinerWeight = unconstrainedSteinerWeight
         self.cleanWeight = - 1/64 #some eps
         self.patialTolerance = tolerance
+        self.outsideTolerance = outsideTolerance
         self.axs = axs
         self.points = []
         #self.boundary = []
@@ -277,6 +283,11 @@ class StarSolver:
             if (inter := intersection_point(ray, seg)) is not None:
                 edgeArrangement.append(eg.getParamOfPointOnSegment(seg, inter))
 
+        for c,rsq in gp.guaranteeOutside:
+            if (inters := eg.outsideIntersectionsSegmentCircle(c, rsq, seg)) is not None:
+                for inter in inters:
+                    edgeArrangement.append(eg.getParamOfPointOnSegment(seg, inter))
+
         edgeArrangement = list(sorted(edgeArrangement))
 
         goodIntervals = []
@@ -299,6 +310,7 @@ class StarSolver:
                 if mid >= FieldNumber(1):
                     continue
             isGood = True
+
             # test if q is good
             for i, j in boundary:
                 bi, bj = self.points[i], self.points[j]
@@ -311,6 +323,9 @@ class StarSolver:
                 if eg.isBadTriangle(bi, bj, q):
                     isGood = False
                     break
+
+            if (len([c for c, rsq in gp.guaranteeOutside if eg.inCircle(c, rsq, q) != "outside"]) <= self.outsideTolerance):
+                isGood = False
             if isGood:
                 if len(goodIntervals) == 0:
                     goodIntervals.append([s, t])
@@ -322,7 +337,6 @@ class StarSolver:
         return goodIntervals
 
     def internalConstrainedK1Solve(self,gp,seg,boundary,rays,circles,filterFunction=None):
-        #TODO: this should realy also respect, that bad triangles might want to drop onto the boundary, which counts not an entirely bad face...
         baseEval = gp.baseEval
 
         if filterFunction is None:
@@ -396,7 +410,7 @@ class StarSolver:
                         candidateIntersections.append(inter)
 
                 #intersect ray with circles
-                for c,rsq in circles:
+                for c,rsq in itertools.chain(circles,gp.guaranteeOutside):
                     if (inters := eg.insideIntersectionsSegmentCircle(c,rsq,rayA)) is not None:
                         for inter in inters:
                             if inter == rayA.source() or inter == rayA.target():
@@ -417,6 +431,24 @@ class StarSolver:
                     if not eg.colinear(Segment(self.points[bi],self.points[bnni]),self.points[bnnni]):
                         candidateIntersections.append(eg.altitudePoint(Segment(self.points[bi],self.points[bnni]),self.points[bni]))
 
+            #now for very expensive guaranteeoutisde intersections...
+            if len(gp.guaranteeOutside) != 0:
+                for a,b in itertools.combinations(itertools.chain(circles,gp.guaranteeOutside),2):
+                    cA,rsqA = a
+                    cB,rsqB = b
+                    for p in eg.getCircleIntersectionsOutside(cA,rsqA,cB,rsqB):
+                        #first check if point is inside
+                        inside = True
+                        for i in range(len(self.points)):
+                            nextI = (i + 1) % len(self.points)
+                            if eg.onWhichSide(Segment(self.points[i], self.points[nextI]),p) == "right":
+                                inside = False
+                                break
+                        if not inside:
+                            continue
+                        candidateIntersections.append(p)
+            #now filter out every point that lies inside a guaranteeoutsidecircle
+            candidateIntersections = [ci for ci in candidateIntersections if len([ c for c,rsq in gp.guaranteeOutside if eg.inCircle(c,rsq,ci) != "outside"])<= self.outsideTolerance]
             candidateIntersections = [ci for ci in candidateIntersections if filterFunction(ci)]
 
             #TODO: better evaluate for partially solved faces, that respects on which boundary is being dropped. this requires more complicated hashes i think...
