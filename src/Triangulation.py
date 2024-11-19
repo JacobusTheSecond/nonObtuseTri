@@ -735,7 +735,7 @@ class Triangulation:
 
         # add all changed bad triangles
         # add all changed bad triangles
-        #nonSuperseeded = self.getNonSuperseededBadTris()
+        nonSuperseeded = self.getNonSuperseededBadTris()
         for triIdx in np.where(self.triangleChanged)[0]:
             if self.isValidTriangle[triIdx] and self.badTris[triIdx]:# and triIdx in nonSuperseeded:
                 triTopoDisks = self.getAllTriangleDisks(triIdx)
