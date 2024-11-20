@@ -745,7 +745,7 @@ class Triangulation:
                         if gp is not None:
                             self.geometricCircleProblems.append(gp)
                         topoDisks.add(disk)
-        logging.info("Number of topological disk problems: " + str(len(topoDisks)))
+            logging.info("Number of topological disk problems: " + str(len(topoDisks)))
 
         self.rebaseTriangleState()
 
@@ -2403,7 +2403,7 @@ class Triangulation:
 
         return GeometricSubproblem([], topoDisk, link, self.exactVerts[link], self.numericVerts[link],  self.segments[innerSegmentIds],
                                    self.segments[segmentIds], self.segmentType[segmentIds], self.instanceSize,
-                                   numBad,numBoundaryDroppers, None,"topoDisk",0, self.gpaxs)
+                                   numBad,numBoundaryDroppers, outside,"topoDisk",0, self.gpaxs)
 
 
     def combinatorialDepth(self):
@@ -2429,7 +2429,7 @@ class Triangulation:
 class QualityImprover:
     def __init__(self, tri: Triangulation,seed=None):
         self.tri = tri
-        self.solver = StarSolver(2,1,1,1.25,2,2,0)
+        self.solver = StarSolver(2,1,1,1.25,2,2,2)
         if seed != None:
             np.random.seed(seed)
         self.seed = seed
