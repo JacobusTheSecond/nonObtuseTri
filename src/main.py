@@ -56,8 +56,8 @@ def solveEveryInstance(solname="cur_solution.zip"):
     axs = None
 
 
-    debugSeed = 530702035#754181797#267012647
-    debugIdxs = None#[125]#[114]#64#7#8#88
+    debugSeed = 580073460#754181797#267012647
+    debugIdxs = None#[87]#[125]#[114]#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
@@ -188,7 +188,7 @@ def seeded_Multi():
     times = manager.list([-1 for _ in range(total)])
     np.random.seed(0)
     seeds = [np.random.randint(0,1000000000) for i in range(total)]
-    print(seeds)
+    print(seeds[107])
     #print(seeds[98])
     lock = manager.Lock()
     with Pool(initializer=init_pool_processes,initargs=(lock,returner,seeds,best,times)) as pool:

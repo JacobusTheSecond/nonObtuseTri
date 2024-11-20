@@ -210,10 +210,11 @@ if __name__=="__main__":
     withConstrainedVoronoi = filepath.parent.parent/"instance_solutions"/"withConstrainedVoronoi"
     new1 = filepath.parent.parent/"instance_solutions"/"constrainedVoronoiFromInside"
     new2 = filepath.parent.parent/"instance_solutions"/"constrainedVoronoiFromOutside"
+    new3 = filepath.parent.parent/"instance_solutions"/"288CircleArrNoOutRNoSegs"
 
-    allexceptnumeric = [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]
+    allexceptnumeric = [new1,new2,exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    compareSolutions(others=[out,new1,new2],base=allexceptnumeric)
+    compareSolutions(others=[out,new3],base=allexceptnumeric)
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
