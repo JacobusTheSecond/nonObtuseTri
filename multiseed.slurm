@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --account=ag_ifi_driemel
-#SBATCH --job-name=seededRuns
-#SBATCH --output=out/log2
+#SBATCH --job-name=seededRunsOutside
+#SBATCH --output=out/log
 #
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=96
