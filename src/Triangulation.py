@@ -2574,7 +2574,7 @@ class QualityImprover:
 
                 assert(tolerance >= 0)
                 mask = np.full(self.tri.badTris.shape, False)
-                mode = "fromInside" #"fromOutside"
+                mode = "fromOutside" #"fromOutside"
 
                 if mode == "fromInside":
                     val = np.max(dists[nonSuperseeded])

@@ -178,7 +178,7 @@ def seeded_Multi():
     np.set_printoptions(linewidth=4*(96//2)+3,formatter={"all":lambda x: str(x).rjust(3)})
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     #numThreads = 96
-    total = 1*numThreads
+    total = 2*numThreads
     filepath = Path(__file__)
     idb = InstanceDatabase(
         filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
@@ -188,7 +188,7 @@ def seeded_Multi():
     times = manager.list([-1 for _ in range(total)])
     np.random.seed(0)
     seeds = [np.random.randint(0,1000000000) for i in range(total)]
-    print(seeds[107])
+    #print(seeds[107])
     #print(seeds[98])
     lock = manager.Lock()
     with Pool(initializer=init_pool_processes,initargs=(lock,returner,seeds,best,times)) as pool:
@@ -197,7 +197,7 @@ def seeded_Multi():
         result.wait()
         allSolutions = [[sol for sol in sols] for sols in returner]
 
-        solLoc = filepath.parent.parent / "instance_solutions" / "288CircleArrNoOutRNoSegs"
+        solLoc = filepath.parent.parent / "instance_solutions" / "288CircleArr2InRNoSegs"
 
         for i in range(len(allSolutions)):
             solname = "seed"+str(seeds[i])+".zip"
