@@ -2770,9 +2770,37 @@ class QualityImprover:
                     actionStack.append(safeAction)
                     actionAdded =True
                 else:
-                    logging.error("terror threat: " + str([(id,self.convergenceDetectorDict[id]) for id in bestUnsafeAction.addedPointIds]))
-                    continue
+                        logging.error("terror threat: " + str(
+                            [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.addedPointIds]) + " "+ str(
+                            [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.removedPointIds]))
+                        continue
                 break
+            if not actionAdded:
+
+                actionList = self.buildUnsafeActionList(False)
+                logging.info("identified " + str(len(actionList)) + " actions.")
+                # eval,bestUnsafeAction = actionList[0]
+                for eval, bestUnsafeAction, gp in actionList:
+
+                    # apply action
+                    for id in bestUnsafeAction.addedPointIds:
+                        self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id, 0) + 1
+                    for id in bestUnsafeAction.removedPointIds:
+                        self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id, 0) + 1
+
+                    safeAction = self.tri.applyUnsafeActionAndReturnSafeAction(bestUnsafeAction)
+                    if len(safeAction.addedPoints) > 0 or len(safeAction.removedPoints) > 0:
+                        if eval >= self.solver.cleanWeight:
+                            keepGoing = False
+                            break
+                        actionStack.append(safeAction)
+                        actionAdded = True
+                    else:
+                        logging.error("terror threat: " + str(
+                            [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.addedPointIds]) + " "+ str(
+                            [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.removedPointIds]))
+                        continue
+                    break
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
             if plotUpdater == 5:
                 #self.tri.plotCoordinateQuality()
