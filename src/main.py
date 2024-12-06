@@ -59,7 +59,7 @@ def solveEveryInstance(solname="cur_solution.zip"):
     debugSeed = 580073460#754181797#267012647
     debugIdxs = None#[87]#[125]#[114]#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
-    withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
+    withShow = False#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         matplotlib.use("TkAgg")
         fig = plt.figure()
