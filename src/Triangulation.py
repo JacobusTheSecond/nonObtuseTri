@@ -516,9 +516,11 @@ class Triangulation:
         self.segments = np.vstack((self.segments, [vIdx, seg[1]]))
         self.segmentType = np.hstack((self.segmentType, self.segmentType[segIdx]))
 
-    def createPoint(self, p: Point):
+    def createPoint(self, p: Point, preferedId = None):
         invalids = self.invalidVertIdxs()
         if len(invalids) == 0:
+            if preferedId != None:
+                assert(False)
             self.exactVerts = np.vstack((self.exactVerts, [p]))
             self.numericVerts = np.vstack((self.numericVerts, [float(p.x()), float(p.y())]))
             self.vertexMap.append([])
@@ -533,6 +535,11 @@ class Triangulation:
             return len(self.exactVerts) - 1
         else:
             myIdx = invalids[0]
+            if preferedId != None:
+                if preferedId in invalids:
+                    myIdx = preferedId
+                else:
+                    assert(False)
             self.exactVerts[myIdx] = p
             self.numericVerts[myIdx] = [float(p.x()), float(p.y())]
             self.pointTopologyChanged[myIdx] = True
@@ -889,7 +896,7 @@ class Triangulation:
                 _addEdgeToStack(j, iIdx)
         # self.validate()
 
-    def addPoint(self, p: Point):
+    def addPoint(self, p: Point, preferedId = None):
 
         #representation quality guard
         if len(p.x().exact()) > 50000 or len(p.y().exact()) > 50000:
@@ -912,7 +919,7 @@ class Triangulation:
             hitTriIdx = hitTriIdxs[0][0]
             hitTri = self.triangles[hitTriIdx]
 
-            newPointIdx = self.createPoint(p)
+            newPointIdx = self.createPoint(p,preferedId)
             newIds = list(self.invalidTriIdxs()) + [len(self.triangles), len(self.triangles) + 1]
             newLeftIdx = newIds[0]
             newRightIdx = newIds[1]
@@ -953,10 +960,10 @@ class Triangulation:
 
             # self.plotTriangulation()
 
-            return True
+            return True,newPointIdx
         elif len(grazedTriIdxs) == 0:
             # outside
-            return False
+            return False,None
         elif len(grazedTriIdxs) == 1:
             # boundary
             assert (len(grazedTriIdxs[0][1]) == 1)
@@ -964,7 +971,7 @@ class Triangulation:
             grazed = self.triangles[grazedIdx]
             grazedIVIdx = grazedTriIdxs[0][1][0][0]
 
-            newPointIdx = self.createPoint(p)
+            newPointIdx = self.createPoint(p,preferedId)
             newIds = list(self.invalidTriIdxs()) + [len(self.triangles)]
             newTriIdx = newIds[0]
 
@@ -1001,7 +1008,7 @@ class Triangulation:
 
             # self.plotTriangulation()
 
-            return True
+            return True,newPointIdx
         elif len(grazedTriIdxs) == 2:
             # constraint or unlucky
             assert (len(grazedTriIdxs[0][1]) == 1)
@@ -1014,7 +1021,7 @@ class Triangulation:
             grazedB = self.triangles[grazedBIdx]
             grazedBIVIdx = grazedTriIdxs[1][1][0][0]
 
-            newPointIdx = self.createPoint(p)
+            newPointIdx = self.createPoint(p,preferedId)
             newIds = list(self.invalidTriIdxs()) + [len(self.triangles), len(self.triangles) + 1]
             newTriByAIdx = newIds[0]
             newTriByBIdx = newIds[1]
@@ -1072,10 +1079,10 @@ class Triangulation:
 
             # self.plotTriangulation()
 
-            return True
+            return True,newPointIdx
         else:
             # vertex
-            return False
+            return False,None
 
     def internalMergePoints(self, source, target):
 
@@ -1490,11 +1497,23 @@ class Triangulation:
 
 
     def replaceEnclosement(self, gs: GeometricSubproblem, solution):
+        addedPoints = []
+        addedIds = []
+        removedPoints = []
+        removedIds = []
         if len(gs.insideSteiners) == 0 and len(solution) == 1:
-            self.addPoint(solution[0])
+            added,newId = self.addPoint(solution[0])
+            if added:
+                addedPoints.append(solution[0])
+                addedIds.append(newId)
+                return True,TriangulationAction(addedPoints,addedIds,removedPoints,removedIds)
+            else:
+                return False,None
         elif len(gs.insideSteiners) > 0:
 
             for vIdx in reversed(sorted(gs.getInsideSteiners())):
+                removedPoints.append(self.point(vIdx))
+                removedIds.append(vIdx)
                 self.removePoint(vIdx)
 
             #trianglePool = []
@@ -1524,14 +1543,14 @@ class Triangulation:
             self.validateVertexMap()
 
             for point in solution:
-                self.addPoint(point)
+                added,newId = self.addPoint(point)
+                if added:
+                    addedPoints.append(point)
+                    addedIds.append(newId)
+            if len(addedPoints) > 0 or len(removedPoints) > 0:
+                return True,TriangulationAction(addedPoints,addedIds,removedPoints,removedIds)
             else:
-                self.ensureDelauney(None)
-
-            pass
-        # 1. unlink all steinerpoints in the inside
-        # 2. reuse unlinked steinerpoints and triangles to add the points from the solution
-        pass
+                return False,None
 
     def getVoronoiFacetEdgeSet(self,vIdx):
         edgeList = []
@@ -2425,6 +2444,69 @@ class Triangulation:
                 actionQueue.append(nId)
         return np.array(dists)
 
+    def applyUnsafeActionAndReturnSafeAction(self,action):
+        assert(not action.safe)
+        removedPoints = []
+        removedPointIds = []
+        addedPoints=[]
+        addedPointIds = []
+
+        for id in action.removedPointIds:
+            if  id in self.invalidVertIdxs() or id >= len(self.exactVerts):
+                continue
+            else:
+                removedPoints.append(self.point(id))
+                removedPointIds.append(id)
+                self.removePoint(id)
+
+
+        for id,p in zip(action.addedPointIds,action.addedPoints):
+            added,actualId = False,None
+            if id in self.invalidVertIdxs():
+                added,actualId = self.addPoint(p,id)
+            else:
+                added,actualId = self.addPoint(p)
+            if added:
+                addedPoints.append(p)
+                addedPointIds.append(actualId)
+        return TriangulationAction(addedPoints,addedPointIds,removedPoints,removedPointIds)
+
+
+    def applyAction(self,action):
+        assert(action.safe)
+        for id,p in zip(action.removedPointIds,action.removedPoints):
+            assert( id not in self.invalidVertIdxs() )
+            assert( p.x() == self.point(id).x() )
+            assert( p.y() == self.point(id).y() )
+            self.removePoint(id)
+
+        for id,p in zip(action.addedPointIds,action.addedPoints):
+            assert(id in self.invalidVertIdxs())
+            added,newId = self.addPoint(p,id)
+            assert(added)
+            assert(id == newId)
+
+    def undoAction(self,action):
+        assert(action.safe)
+        for id, p in zip(action.addedPointIds, action.addedPoints):
+            assert (id not in self.invalidVertIdxs())
+            assert (p.x() == self.point(id).x())
+            assert (p.y() == self.point(id).y())
+            self.removePoint(id)
+
+        for id, p in zip(action.removedPointIds, action.removedPoints):
+            assert (id in self.invalidVertIdxs())
+            added, newId = self.addPoint(p, id)
+            assert (added)
+            assert (id == newId)
+
+class TriangulationAction:
+    def __init__(self,addedPoints,addedPointIds,removedPoints,removedPointIds,safe=True):
+        self.addedPoints = addedPoints
+        self.addedPointIds = addedPointIds
+        self.removedPoints = removedPoints
+        self.removedPointIds = removedPointIds
+        self.safe = safe
 
 class QualityImprover:
     def __init__(self, tri: Triangulation,seed=None):
@@ -2433,6 +2515,7 @@ class QualityImprover:
         if seed != None:
             np.random.seed(seed)
         self.seed = seed
+        self.convergenceDetectorDict = dict()
 
 
     def plotHistory(self,numSteinerHistory,numBadTriHistory,round,specialRounds,ax,twin_ax):
@@ -2459,7 +2542,149 @@ class QualityImprover:
             for r in specialRounds:
                 ax.plot([r,r],[b,t],color="blue")
 
+    def buildUnsafeActionList(self,earlyStoppingAllowed=False):
+        actionList = []
+        hasGoodSolution = False
+
+        self.tri.updateGeometricProblems()
+
+        #geometricsubproblem induced actions
+        np.random.shuffle(self.tri.geometricLinkProblems)
+        np.random.shuffle(self.tri.geometricCircleProblems)
+        np.random.shuffle(self.tri.geometricSegmentProblems)
+        for gp in self.tri.geometricSubproblemIterator():
+            #TODO: return all different types of solutions instead of the best one, but respect rounding?
+            #for eval, sol in self.solver.solve(gp):
+            eval,sol = self.solver.solve(gp)
+            if sol != None:
+                if eval < self.solver.cleanWeight:
+                    hasGoodSolution = True
+                actionList.append((eval,TriangulationAction(sol,[-1 for _ in sol],[],gp.getInsideSteiners(),False),gp))
+        if hasGoodSolution and earlyStoppingAllowed:
+            return sorted(actionList,key=lambda x:x[0])
+        #bad triangle induced actions
+        nonSuperseeded = self.tri.getNonSuperseededBadTris()  # list(np.where(self.tri.badTris == True)[0])
+        if len(nonSuperseeded) != 0:
+            nonSuperseededMask = np.full(self.tri.badTris.shape, False)
+            nonSuperseededMask[nonSuperseeded] = True
+
+            dists = self.tri.combinatorialDepth()
+            centerFindIdx = None
+
+            # tolerance for distance selector
+            tolerance = 1
+            # setting this to zero could result in situations that do not converge. careful!
+            withOuterLayer = True
+
+            assert (tolerance >= 0)
+            mask = np.full(self.tri.badTris.shape, False)
+            mode = "fromOutside"  # "fromOutside"
+
+            if mode == "fromInside":
+                val = np.max(dists[nonSuperseeded])
+                mask |= (((dists >= val - tolerance)) & (nonSuperseededMask))
+                if withOuterLayer:
+                    mask |= ((dists == 0) & (self.tri.badTris))
+
+            elif mode == "fromOutside":
+                val = np.min(dists[nonSuperseeded])
+                mask |= (((dists <= val + tolerance)) & (nonSuperseededMask))
+                if withOuterLayer:
+                    mask |= ((dists == 0) & (self.tri.badTris))
+
+            locs = np.where(mask)[0]
+            np.random.shuffle(locs)
+            for id in locs:
+                center = None
+                threat = self.convergenceDetectorDict.get(id, 0)
+                if threat < 10:
+                    bA = eg.badAngle(self.tri.point(self.tri.triangles[id, 0]),
+                                     self.tri.point(self.tri.triangles[id, 1]),
+                                     self.tri.point(self.tri.triangles[id, 2]))
+                    if self.tri.triangleMap[id, bA, 2] != noneEdge:
+                        # logging.error("alt")
+                        center = eg.altitudePoint(Segment(self.tri.point(self.tri.triangles[id, (bA + 1) % 3]),
+                                                          self.tri.point(self.tri.triangles[id, (bA + 2) % 3])),
+                                                  self.tri.point(self.tri.triangles[id, bA]))
+                    else:
+                        # logging.error("circ")
+                        center = self.tri.findComplicatedCenter(id)
+                elif threat < 20:
+                    center = Point(*self.tri.circumCenters[id])
+                else:
+                    center = Point(eg.zero, eg.zero)
+                    for i in range(3):
+                        center += self.tri.point(self.tri.triangles[id, i])
+                    center = center.scale(FieldNumber(1) / FieldNumber(3))
+
+                actionList.append((self.solver.cleanWeight-1/64,TriangulationAction([center],[-1],[],[],False),None))
+        actionList = sorted(actionList,key=lambda x:x[0])
+        return actionList
+
+    def addCenterOfTriangle(self,id,threat,depth):
+        logging.info("convergence threat level: " + str(threat))
+        if threat < 10:
+            # if solved by altitudedrop, do so, else use complicated center
+            center = None
+            bA = eg.badAngle(self.tri.point(self.tri.triangles[id, 0]),
+                             self.tri.point(self.tri.triangles[id, 1]),
+                             self.tri.point(self.tri.triangles[id, 2]))
+            if self.tri.triangleMap[id, bA, 2] != noneEdge:
+                # logging.error("alt")
+                center = eg.altitudePoint(Segment(self.tri.point(self.tri.triangles[id, (bA + 1) % 3]),
+                                                  self.tri.point(self.tri.triangles[id, (bA + 2) % 3])),
+                                          self.tri.point(self.tri.triangles[id, bA]))
+            else:
+                # logging.error("circ")
+                center = self.tri.findComplicatedCenter(id)
+
+            triang = list(self.tri.triangles[id])
+            added,newPointId = self.tri.addPoint(center)
+            if added:
+                logging.info("successfully added complicated Center of triangle " + str(id) + " at depth " + str(depth))
+                lastEdit = "circumcenter"
+                added = True
+                allIn = np.all([vIdx in self.tri.triangles[id] for vIdx in triang])
+                if allIn:
+                    logging.error("Addition did not flip the triangle even though it should...")
+                return True,TriangulationAction([center],[newPointId],[],[])
+            else:
+                logging.error(str(self.seed) + ": failed to add complicated Center of triangle " + str(id) + " at depth " + str(depth))
+                return False,None
+        elif threat < 20:
+            logging.info(str(self.seed) + ": reached convergence threat " + str(threat))
+            center = Point(*self.tri.circumCenters[id])
+            assert (center != None)
+            added,newPointId = self.tri.addPoint(center)
+            if added:
+                logging.info("successfully added circumcenter of triangle " + str(id) + " at depth " + str(
+                    depth))
+                return True,TriangulationAction([center],[newPointId],[],[])
+            else:
+                logging.info(str(self.seed) + ": failed to add circumcenter of triangle " + str(
+                    id) + " at depth " + str(depth))
+                return False,None
+        else:
+            logging.error(
+                str(self.seed) + ": reached convergence threat " + str(threat))
+            center = Point(eg.zero, eg.zero)
+            for i in range(3):
+                center += self.tri.point(self.tri.triangles[id, i])
+            center = center.scale(FieldNumber(1) / FieldNumber(3))
+            assert (center != None)
+            added,newPointId = self.tri.addPoint(center)
+            if added:
+                logging.info("successfully added centroid of triangle " + str(id) + " at depth " + str(
+                    depth))
+                return True,TriangulationAction([center],[newPointId],[],[])
+            else:
+                logging.error(
+                    str(self.seed) + ": failed to add centroid of triangle " + str(id) + " at depth " + str(
+                        depth))
+                return False,None
+
     def improve(self):
+        actionStack = []
         keepGoing = True
         lastEdit = "None"
         plotUpdater = 0
@@ -2469,37 +2694,39 @@ class QualityImprover:
         numBadTriHistory = []
         lastImprovement = round
         bestSofar = 1000
-        convergenceDetectorDict = dict()
+        self.convergenceDetectorDict = dict()
         while keepGoing:
+            logging.info("----- ACTIONSTACK -----")
+            for a in actionStack:
+                logging.info(str([(float(p.x()),float(p.y())) for p in a.addedPoints]))
+                logging.info(str(a.addedPointIds))
+                logging.info(str([(float(p.x()),float(p.y())) for p in a.removedPoints]))
+                logging.info(str(a.removedPointIds))
+
+            logging.info("-----------------------")
+
+            for a in reversed(actionStack):
+            #    self.tri.undoAction(a)
+            #    self.tri.plotTriangulation()
+                pass
+
+            for a in actionStack:
+            #    self.tri.applyAction(a)
+            #    self.tri.plotTriangulation()
+                pass
+
             logging.info(f"Round {round}: #Steiner = {len(self.tri.validVertIdxs()) - self.tri.instanceSize}, #>90° = {len( np.where(self.tri.badTris == True)[0])}, subproblems solved = {self.solver.succesfulSolves}, rep qual = {self.tri.getCoordinateQuality()}")
             numSteinerHistory.append(len(self.tri.validVertIdxs()) - self.tri.instanceSize)
             numBadTriHistory.append(len( np.where(self.tri.badTris == True)[0]))
             round += 1
             plotUpdater += 1
             # curEdit = "None"
-            bestEval, bestSol, replacer = 0, None, None
-            # self.tri.plotTriangulation()
-            logging.debug("updating Geometric problems...")
-            self.tri.updateGeometricProblems()
-            np.random.shuffle(self.tri.geometricLinkProblems)
-            np.random.shuffle(self.tri.geometricCircleProblems)
-            np.random.shuffle(self.tri.geometricSegmentProblems)
-            logging.debug("completed updating Geometric problems")
-            logging.debug("drawing...")
-            self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
-            if plotUpdater == 1:
-                #self.tri.plotCoordinateQuality()
-                self.tri.plotTriangulation()
-                plotUpdater = 0
-            logging.debug("done drawing")
-            self.tri.validateTriangleMap()
-            #logging.debug("scraping through "+str(len(self.tri.geometricProblems))+" many geometric subproblems")
 
+            #convergence safeguards
             if len(np.where(self.tri.badTris)[0]) < bestSofar:
                 bestSofar = len(np.where(self.tri.badTris)[0])
                 lastImprovement = round
 
-            #convergence safeguard
             if self.solver.patialTolerance > 0 and round - lastImprovement > 25:
                 self.solver.patialTolerance = max(0,self.solver.patialTolerance - 1)
                 logging.info(f"Tolerance set to {self.solver.patialTolerance}")
@@ -2520,6 +2747,58 @@ class QualityImprover:
                 self.solver.patialTolerance = 0
                 self.solver.outsideTolerance = min(self.solver.patialTolerance,self.solver.outsideTolerance)
                 specialRounds.append(round)
+
+            #get best action
+            actionList = self.buildUnsafeActionList(True)
+            logging.info("identified " + str(len(actionList)) +" actions.")
+            #eval,bestUnsafeAction = actionList[0]
+
+            actionAdded = False
+            for eval,bestUnsafeAction,gp in actionList:
+
+                #apply action
+                for id in bestUnsafeAction.addedPointIds:
+                    self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
+                for id in bestUnsafeAction.removedPointIds:
+                    self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
+
+                safeAction = self.tri.applyUnsafeActionAndReturnSafeAction(bestUnsafeAction)
+                if len(safeAction.addedPoints) > 0 or len(safeAction.removedPoints) > 0:
+                    if eval >= self.solver.cleanWeight:
+                        keepGoing = False
+                        break
+                    actionStack.append(safeAction)
+                    actionAdded =True
+                else:
+                    logging.error("terror threat: " + str([(id,self.convergenceDetectorDict[id]) for id in bestUnsafeAction.addedPointIds]))
+                    continue
+                break
+            self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
+            if plotUpdater == 5:
+                #self.tri.plotCoordinateQuality()
+                self.tri.plotTriangulation()
+                plotUpdater = 0
+            if not actionAdded:
+                keepGoing = False
+            continue
+
+            bestEval, bestSol, replacer = 0, None, None
+            # self.tri.plotTriangulation()
+            logging.debug("updating Geometric problems...")
+            self.tri.updateGeometricProblems()
+            np.random.shuffle(self.tri.geometricLinkProblems)
+            np.random.shuffle(self.tri.geometricCircleProblems)
+            np.random.shuffle(self.tri.geometricSegmentProblems)
+            logging.debug("completed updating Geometric problems")
+            logging.debug("drawing...")
+            self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
+            if plotUpdater == 1:
+                #self.tri.plotCoordinateQuality()
+                self.tri.plotTriangulation()
+                plotUpdater = 0
+            logging.debug("done drawing")
+            self.tri.validateTriangleMap()
+            #logging.debug("scraping through "+str(len(self.tri.geometricProblems))+" many geometric subproblems")
 
             for gp in self.tri.geometricSubproblemIterator():
                 # gp.plotMe()
@@ -2592,61 +2871,19 @@ class QualityImprover:
                 np.random.shuffle(locs)
                 centerFindIdx = locs[0]
 
-
                 convergenceDetectorDict[centerFindIdx] = convergenceDetectorDict.get(centerFindIdx,0) + 1
-                logging.info("convergence threat level: " + str(convergenceDetectorDict[centerFindIdx]))
-                if convergenceDetectorDict[centerFindIdx] < 10:
-                    #if solved by altitudedrop, do so, else use complicated center
-                    center = None
-                    bA = eg.badAngle(self.tri.point(self.tri.triangles[centerFindIdx,0]),self.tri.point(self.tri.triangles[centerFindIdx,1]),self.tri.point(self.tri.triangles[centerFindIdx,2]))
-                    if self.tri.triangleMap[centerFindIdx,bA,2] != noneEdge:
-                        #logging.error("alt")
-                        center = eg.altitudePoint(Segment(self.tri.point(self.tri.triangles[centerFindIdx,(bA+1)%3]),self.tri.point(self.tri.triangles[centerFindIdx,(bA+2)%3])),self.tri.point(self.tri.triangles[centerFindIdx,bA]))
-                    else:
-                        #logging.error("circ")
-                        center = self.tri.findComplicatedCenter(centerFindIdx)
-                    if (center == None):
-                        center = self.tri.findComplicatedCenter(centerFindIdx)
-                        assert(False)
-                    triang = list(self.tri.triangles[centerFindIdx])
-                    if self.tri.addPoint(center):
-                        logging.info("successfully added complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
-                        lastEdit = "circumcenter"
-                        added = True
-                        allIn = np.all([vIdx in self.tri.triangles[centerFindIdx] for vIdx in triang])
-                        if allIn:
-                            logging.error("Addition did not flip the triangle even though it should...")
-                    else:
-                        logging.error(str(self.seed) + ": failed to add complicated Center of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
-                elif convergenceDetectorDict[centerFindIdx] < 20:
-                    logging.info(str(self.seed) + ": reached convergence threat "+str(convergenceDetectorDict[centerFindIdx]))
-                    center = Point(*self.tri.circumCenters[centerFindIdx])
-                    assert (center != None)
-                    if self.tri.addPoint(center):
-                        logging.info("successfully added circumcenter of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
-                    else:
-                        logging.info(str(self.seed) + ": failed to add circumcenter of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
-                else:
-                    logging.error(str(self.seed) + ": reached convergence threat "+str(convergenceDetectorDict[centerFindIdx]))
-                    center = Point(eg.zero,eg.zero)
-                    for i in range(3):
-                        center += self.tri.point(self.tri.triangles[centerFindIdx,i])
-                    center = center.scale(FieldNumber(1)/FieldNumber(3))
-                    assert (center != None)
-                    if self.tri.addPoint(center):
-                        logging.info("successfully added centroid of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
-                        lastEdit = "circumcenter"
-                        added = True
-                    else:
-                        logging.error(str(self.seed) + ": failed to add centroid of triangle " + str(centerFindIdx) + " at depth " + str(dists[centerFindIdx]))
-
+                added,action = self.addCenterOfTriangle(centerFindIdx,convergenceDetectorDict[centerFindIdx],dists[centerFindIdx])
+                if added:
+                    actionStack.append(action)
 
             else:
                 if self.tri.gpaxs != None:
                     replacer.plotMe()
                 # lastEdit = curEdit
                 logging.info("replacing identified subproblem of type "+replacer.gpType)
-                self.tri.replaceEnclosement(replacer, bestSol)
+                added,action = self.tri.replaceEnclosement(replacer, bestSol)
+                if added:
+                    actionStack.append(action)
                 logging.info("done replacing")
                 self.tri.validateTriangleMap()
         self.tri.plotTriangulation()

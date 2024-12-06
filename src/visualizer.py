@@ -2,6 +2,9 @@ import logging
 
 import matplotlib.pyplot as plt
 import matplotlib
+
+from src.solutionManagement import updateSummaries
+
 matplotlib.use("TkAgg")
 import numpy as np
 from pathlib import Path
@@ -195,6 +198,8 @@ def compareSolutions(base,others):
 if __name__=="__main__":
     #showSolutions()
 
+    updateSummaries()
+
     filepath = Path(__file__)
     numeric_solutions = filepath.parent.parent/"instance_solutions" / "numeric_solutions"
     exact_solutions = filepath.parent.parent/"instance_solutions" / "exact_solutions"
@@ -210,11 +215,13 @@ if __name__=="__main__":
     withConstrainedVoronoi = filepath.parent.parent/"instance_solutions"/"withConstrainedVoronoi"
     new1 = filepath.parent.parent/"instance_solutions"/"constrainedVoronoiFromInside"
     new2 = filepath.parent.parent/"instance_solutions"/"constrainedVoronoiFromOutside"
+    new3Old = filepath.parent.parent/"instance_solutions"/"288CircleArrNoOutRNoSegsOld"
     new3 = filepath.parent.parent/"instance_solutions"/"288CircleArrNoOutRNoSegs"
+    new4 = filepath.parent.parent/"instance_solutions"/"288CircleArr2OutRNoSegs"
 
-    allexceptnumeric = [new1,new2,exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]
+    allexceptnumeric = [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    compareSolutions(others=[out,new3],base=allexceptnumeric)
+    compareSolutions(others=[new4,new3,new3Old],base=[] + allexceptnumeric)#[new1,new2,out])
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])

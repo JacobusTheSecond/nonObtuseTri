@@ -2,7 +2,7 @@ import logging
 import pickle
 from pathlib import Path
 
-from cgshop2025_pyutils import ZipSolutionIterator, ZipWriter
+from cgshop2025_pyutils import ZipSolutionIterator, ZipWriter, verify, InstanceDatabase
 
 
 def loadSolutions(foldername):
@@ -69,7 +69,43 @@ def loadSolutions(foldername):
     return best
 
 def updateSummaries():
+    best = None
     filepath = Path(__file__)
     for name in (filepath.parent.parent/"instance_solutions").iterdir():
         if name.is_dir():
-            loadSolutions(name)
+            sol = loadSolutions(name)
+            if best == None:
+                best = []
+                for solution,_ in sol:
+                    best.append(solution)
+            else:
+                i = 0
+                for solution,_ in sol:
+                    if len(best[i].steiner_points_x) < len(best[i].steiner_points_x):
+                        best[i] = solution
+                    i += 1
+    if best == None:
+        return
+
+    bestName = (filepath.parent.parent/"solution_summaries"/"best.zip")
+
+
+    zips = filepath.parent.parent/"challenge_instances_cgshop25" / "zips"
+    idb = InstanceDatabase(zips/"challenge_instances_cgshop25_rev1.zip")
+
+    for sol in best:
+        print("final verification of " +sol.instance_uid,end="")
+        verRes = verify(idb[sol.instance_uid],sol)
+        if verRes:
+            print(" SUCCESS!")
+        else:
+            print(" FAILURE!")
+
+    if bestName.exists():
+        bestName.unlink()
+
+    with ZipWriter(bestName) as zw:
+        logging.info("writting best summary at " + str(bestName))
+        for solution in best:
+            zw.add_solution(solution)
+
