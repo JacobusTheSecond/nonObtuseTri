@@ -2770,10 +2770,10 @@ class QualityImprover:
                     actionStack.append(safeAction)
                     actionAdded =True
                 else:
-                        logging.error("terror threat: " + str(
-                            [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.addedPointIds]) + " "+ str(
-                            [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.removedPointIds]))
-                        continue
+                    logging.error("terror threat: " + str(
+                        [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.addedPointIds]) + " "+ str(
+                        [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.removedPointIds]))
+                    continue
                 break
             if not actionAdded:
 
@@ -2807,7 +2807,10 @@ class QualityImprover:
                 self.tri.plotTriangulation()
                 plotUpdater = 0
             if not actionAdded:
-                keepGoing = False
+                if len(self.tri.getNonSuperseededBadTris()) == 0:
+                    keepGoing = False
+                else:
+                    logging.error("only increased convergence threat this iteration...")
             continue
 
             bestEval, bestSol, replacer = 0, None, None
