@@ -5,7 +5,7 @@
 #
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=96
-#SBATCH --partition=lm_long
+#SBATCH --partition=intelsr_medium
 #SBATCH --mem=900G
 #SBATCH --time=1-00:00:00
 
