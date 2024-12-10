@@ -257,6 +257,8 @@ def pooledWorkerFunction(index):
         print("TIMES:")
         np.set_printoptions(linewidth=4 * (96 // 2) + 3, formatter={"all": lambda x: str(x).rjust(3)})
         tts = np.array(times)
+        print("CURRENT ID:")
+        print(currentInstance)
         print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
     times[myIdx] = -1
     currentInstance[myIdx] = -1
@@ -285,7 +287,7 @@ def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,
 
 def seededPool():
     numThreads = 96
-    numSeeds = 1
+    numSeeds = 4
     np.set_printoptions(linewidth=4*(96//2)+3,formatter={"all":lambda x: str(x).rjust(3)})
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     filepath = Path(__file__)
