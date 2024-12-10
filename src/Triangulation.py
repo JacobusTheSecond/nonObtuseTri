@@ -1,3 +1,4 @@
+import copy
 import itertools
 
 import numpy as np
@@ -437,6 +438,8 @@ class Triangulation:
 
     def setVertexMap(self, triIdx):
         for iVIdx in range(3):
+            if self.triangles[triIdx,iVIdx] >= len(self.vertexMap):
+                print("oh no")
             self.vertexMap[self.triangles[triIdx, iVIdx]].append([triIdx, iVIdx])
         for vIdx in self.triangles[triIdx]:
             self.pointTopologyChanged[vIdx] = True
@@ -601,6 +604,48 @@ class Triangulation:
                     self.triangleMap[neighbour, oppIVIdx, :2] = [myIdx, iVIdx]
         return myIdxs
 
+    def copyOfCombinatorialState(self):
+        state = dict()
+        state["triangles"] = np.copy(self.triangles)
+        state["triangleMap"] = np.copy(self.triangleMap)
+        state["edgeTopologyChanged"] = np.copy(self.edgeTopologyChanged)
+        state["isValidTriangle"] = np.copy(self.isValidTriangle)
+        state["triangleChanged"] = np.copy(self.triangleChanged)
+        state["closestToCC"] = np.copy(self.closestToCC)
+        state["closestDist"] = np.copy(self.closestDist)
+        state["badTris"] = np.copy(self.badTris)
+        state["circumCenters"] = np.copy(self.circumCenters)
+        state["circumRadiiSqr"] = np.copy(self.circumRadiiSqr)
+        state["vertexMap"] = copy.deepcopy(self.vertexMap)
+        state["segments"] = np.copy(self.segments)
+        state["isValidVertex"] = np.copy(self.isValidVertex)
+        state["segmentType"] = np.copy(self.segmentType)
+        return state
+
+    def applyCombinatorialState(self,state):
+        self.triangles = np.copy(state["triangles"])
+        self.triangleMap = np.copy(state["triangleMap"])
+        self.edgeTopologyChanged = np.copy(state["edgeTopologyChanged"])
+        self.isValidTriangle = np.copy(state["isValidTriangle"])
+        self.triangleChanged = np.copy(state["triangleChanged"])
+        self.closestToCC = np.copy(state["closestToCC"])
+        self.closestDist = np.copy(state["closestDist"])
+        self.badTris = np.copy(state["badTris"])
+        self.circumCenters = np.copy(state["circumCenters"])
+        self.circumRadiiSqr = np.copy(state["circumRadiiSqr"])
+        self.vertexMap = copy.deepcopy(state["vertexMap"])
+        self.segments = np.copy(state["segments"])
+        self.isValidVertex = np.copy(state["isValidVertex"])
+        self.segmentType = np.copy(state["segmentType"])
+
+        # need to repopulate empty rows to stay consistent. maybe in future change combinatorial state as well...
+        #hopefuly we only need to update vertex based rows...
+        for idx in range(len(self.vertexMap),len(self.exactVerts)):
+            #create the combinatorial side of an invalid vertex
+            self.vertexMap.append([])
+            self.pointTopologyChanged = np.hstack((self.pointTopologyChanged, False))
+            self.isValidVertex = np.hstack((self.isValidVertex, False))
+
     def setInvalidTriangle(self, triIdx, tri, triMap):
         self.triangles[triIdx] = tri
         self.triangleMap[triIdx] = triMap
@@ -742,7 +787,7 @@ class Triangulation:
 
         # add all changed bad triangles
         # add all changed bad triangles
-        nonSuperseeded = self.getNonSuperseededBadTris()
+        #nonSuperseeded = self.getNonSuperseededBadTris()
         for triIdx in np.where(self.triangleChanged)[0]:
             if self.isValidTriangle[triIdx] and self.badTris[triIdx]:# and triIdx in nonSuperseeded:
                 triTopoDisks = self.getAllTriangleDisks(triIdx)
@@ -752,7 +797,7 @@ class Triangulation:
                         if gp is not None:
                             self.geometricCircleProblems.append(gp)
                         topoDisks.add(disk)
-            logging.info("Number of topological disk problems: " + str(len(topoDisks)))
+            #logging.info("Number of topological disk problems: " + str(len(topoDisks)))
 
         self.rebaseTriangleState()
 
@@ -1936,7 +1981,8 @@ class Triangulation:
                     edgeClippedEdges.append(edge)
                     edgeClippedRounders.append([boundingSegs[cS],boundingSegs[cT]])
                 if cS != None and cT != None and cS == cT:
-                    logging.info("intersting case! we dont do anything tho, as clipping is correct this way")
+                    pass
+                    #logging.info("intersting case! we dont do anything tho, as clipping is correct this way")
 
         return edgeClippedEdges,edgeClippedSegs, edgeClippedRounders
 
@@ -2298,6 +2344,7 @@ class Triangulation:
 
 
     def getAllTriangleDisks(self,triIdx):
+        #TODO: optmize
         #first figure out all triangles that intersect the circumcenter of triIdx
         myCC = self.circumcenter(triIdx)
         myCRsqr = self.circumRadiiSqr[triIdx]
@@ -2542,9 +2589,13 @@ class QualityImprover:
             for r in specialRounds:
                 ax.plot([r,r],[b,t],color="blue")
 
-    def buildUnsafeActionList(self,earlyStoppingAllowed=False):
+    def buildUnsafeActionList(self,earlyStoppingAllowed:int,onlyChanged=False):
         actionList = []
         hasGoodSolution = False
+
+        nonSuperseeded = self.tri.getNonSuperseededBadTris()
+        if onlyChanged:
+            nonSuperseeded = np.array([id for id in nonSuperseeded if self.tri.triangleChanged[id]])
 
         self.tri.updateGeometricProblems()
 
@@ -2553,6 +2604,8 @@ class QualityImprover:
         np.random.shuffle(self.tri.geometricCircleProblems)
         np.random.shuffle(self.tri.geometricSegmentProblems)
         for gp in self.tri.geometricSubproblemIterator():
+            if onlyChanged and gp.wasSolved:
+                continue
             #TODO: return all different types of solutions instead of the best one, but respect rounding?
             #for eval, sol in self.solver.solve(gp):
             eval,sol = self.solver.solve(gp)
@@ -2560,41 +2613,52 @@ class QualityImprover:
                 if eval < self.solver.cleanWeight:
                     hasGoodSolution = True
                 actionList.append((eval,TriangulationAction(sol,[-1 for _ in sol],[],gp.getInsideSteiners(),False),gp))
-        if hasGoodSolution and earlyStoppingAllowed:
+        if hasGoodSolution and earlyStoppingAllowed != -1 and len(actionList) > earlyStoppingAllowed :
             return sorted(actionList,key=lambda x:x[0])
+
         #bad triangle induced actions
-        nonSuperseeded = self.tri.getNonSuperseededBadTris()  # list(np.where(self.tri.badTris == True)[0])
+        #nonSuperseeded = self.tri.getNonSuperseededBadTris()  # list(np.where(self.tri.badTris == True)[0])
+
         if len(nonSuperseeded) != 0:
-            nonSuperseededMask = np.full(self.tri.badTris.shape, False)
-            nonSuperseededMask[nonSuperseeded] = True
+            locs = None
 
-            dists = self.tri.combinatorialDepth()
-            centerFindIdx = None
+            if not onlyChanged:
 
-            # tolerance for distance selector
-            tolerance = 1
-            # setting this to zero could result in situations that do not converge. careful!
-            withOuterLayer = True
+                nonSuperseededMask = np.full(self.tri.badTris.shape, False)
+                nonSuperseededMask[nonSuperseeded] = True
+                # mask = nonSuperseededMask
 
-            assert (tolerance >= 0)
-            mask = np.full(self.tri.badTris.shape, False)
-            mode = "fromInside"  # "fromOutside"
+                dists = self.tri.combinatorialDepth()
+                centerFindIdx = None
 
-            if mode == "fromInside":
-                val = np.max(dists[nonSuperseeded])
-                mask |= (((dists >= val - tolerance)) & (nonSuperseededMask))
-                if withOuterLayer:
-                    mask |= ((dists == 0) & (self.tri.badTris))
+                # tolerance for distance selector
+                tolerance = 2
+                # setting this to zero could result in situations that do not converge. careful!
+                withOuterLayer = True#False
 
-            elif mode == "fromOutside":
-                val = np.min(dists[nonSuperseeded])
-                mask |= (((dists <= val + tolerance)) & (nonSuperseededMask))
-                if withOuterLayer:
-                    mask |= ((dists == 0) & (self.tri.badTris))
+                assert (tolerance >= 0)
+                mask = np.full(self.tri.badTris.shape, False)
+                mode = "fromInside"  # "fromOutside"
 
-            locs = np.where(mask)[0]
+                if mode == "fromInside":
+                    val = np.max(dists[nonSuperseeded])
+                    mask |= (((dists >= val - tolerance)) & (nonSuperseededMask))
+                    if withOuterLayer:
+                        mask |= ((dists == 0) & (self.tri.badTris))
+
+                elif mode == "fromOutside":
+                    val = np.min(dists[nonSuperseeded])
+                    mask |= (((dists <= val + tolerance)) & (nonSuperseededMask))
+                    if withOuterLayer:
+                        mask |= ((dists == 0) & (self.tri.badTris))
+
+                locs = np.where(mask)[0]
+            else:
+                locs = nonSuperseeded
             np.random.shuffle(locs)
             for id in locs:
+                if earlyStoppingAllowed != -1 and len(actionList) > earlyStoppingAllowed :
+                    return sorted(actionList,key=lambda x:x[0])
                 center = None
                 threat = self.convergenceDetectorDict.get(id, 0)
                 if threat < 10:
@@ -2618,8 +2682,68 @@ class QualityImprover:
                     center = center.scale(FieldNumber(1) / FieldNumber(3))
 
                 actionList.append((self.solver.cleanWeight-1/64,TriangulationAction([center],[-1],[],[],False),None))
+                if earlyStoppingAllowed != -1 and len(actionList) > earlyStoppingAllowed:
+                    break
         actionList = sorted(actionList,key=lambda x:x[0])
         return actionList
+
+    def eval(self):
+        #numSteinerHistory.append(len(self.tri.validVertIdxs()) - self.tri.instanceSize)
+        #numBadTriHistory.append(len(np.where(self.tri.badTris == True)[0]))
+        #return len(self.tri.validVertIdxs()) - self.tri.instanceSize + len(np.where(self.tri.badTris == True)[0])
+        return len(self.tri.validVertIdxs()) - self.tri.instanceSize + 2* len(self.tri.getNonSuperseededBadTris()) + len(np.where(self.tri.badTris == True)[0])
+
+    def solveEveryGP(self):
+        for gp in self.tri.geometricSubproblemIterator():
+            self.solver.solve(gp)
+
+    def realEvalAction(self,action:TriangulationAction,depth:int):
+        assert(depth >= 0)
+        actualAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
+        myEval = -1
+        if depth == 0:
+            myEval = self.eval()
+        elif depth == 1:
+
+            unsafeSubactions = self.buildUnsafeActionList(-1, True)
+            combinatorialState = self.tri.copyOfCombinatorialState()
+            #print(" "*(3-depth) + str(len(unsafeSubactions)))
+
+            # if we have actions:
+            for _, subaction, _ in unsafeSubactions:
+
+                realSubAction = self.tri.applyUnsafeActionAndReturnSafeAction(subaction)
+                subEval = self.eval()
+                if myEval == -1 or subEval < myEval:
+                    myEval = subEval
+
+                #afterwards vertex state should be the same...
+                self.tri.undoAction(realSubAction)
+                #and then combinatorial state is the same as well hopefully
+                self.tri.applyCombinatorialState(combinatorialState)
+
+            # no action to be applied :(
+            if myEval == -1:
+                myEval = self.eval()
+
+        else:
+            #deep eval
+            unsafeSubactions = self.buildUnsafeActionList(-1, True)
+            #print(" "*(3-depth) + str(len(unsafeSubactions)))
+
+            #if we have actions:
+            for _, subaction, _ in unsafeSubactions:
+                subEval = self.realEvalAction(subaction, depth - 1)
+                if myEval == -1 or subEval < myEval:
+                    myEval = subEval
+
+            #no action to be applied :(
+            if myEval == -1:
+                myEval = self.eval()
+
+        self.tri.undoAction(actualAction)
+        self.tri.updateGeometricProblems()
+        return myEval
 
     def addCenterOfTriangle(self,id,threat,depth):
         logging.info("convergence threat level: " + str(threat))
@@ -2695,15 +2819,16 @@ class QualityImprover:
         lastImprovement = round
         bestSofar = 1000
         self.convergenceDetectorDict = dict()
+        convergenceEndCounter = 0
         while keepGoing:
-            logging.info("----- ACTIONSTACK -----")
-            for a in actionStack:
-                logging.info(str([(float(p.x()),float(p.y())) for p in a.addedPoints]))
-                logging.info(str(a.addedPointIds))
-                logging.info(str([(float(p.x()),float(p.y())) for p in a.removedPoints]))
-                logging.info(str(a.removedPointIds))
+            #logging.info("----- ACTIONSTACK -----")
+            #for a in actionStack:
+            #    logging.info(str([(float(p.x()),float(p.y())) for p in a.addedPoints]))
+            #    logging.info(str(a.addedPointIds))
+            #    logging.info(str([(float(p.x()),float(p.y())) for p in a.removedPoints]))
+            #    logging.info(str(a.removedPointIds))
 
-            logging.info("-----------------------")
+            #logging.info("-----------------------")
 
             for a in reversed(actionStack):
             #    self.tri.undoAction(a)
@@ -2749,61 +2874,43 @@ class QualityImprover:
                 specialRounds.append(round)
 
             #get best action
-            actionList = self.buildUnsafeActionList(True)
+            #TODO: add early stopping up to k
+            numMoves = 15
+            actionList = self.buildUnsafeActionList(numMoves,False)
             logging.info("identified " + str(len(actionList)) +" actions.")
-            #eval,bestUnsafeAction = actionList[0]
-
             actionAdded = False
-            for eval,bestUnsafeAction,gp in actionList:
 
-                #apply action
-                for id in bestUnsafeAction.addedPointIds:
-                    self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
-                for id in bestUnsafeAction.removedPointIds:
-                    self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
+            betterEvalActionPairs = []
 
-                safeAction = self.tri.applyUnsafeActionAndReturnSafeAction(bestUnsafeAction)
-                if len(safeAction.addedPoints) > 0 or len(safeAction.removedPoints) > 0:
-                    if eval >= self.solver.cleanWeight:
-                        keepGoing = False
-                        break
-                    actionStack.append(safeAction)
-                    actionAdded =True
-                else:
-                    logging.error("terror threat: " + str(
-                        [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.addedPointIds]) + " "+ str(
-                        [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.removedPointIds]))
+            depth = 1
+            actionList = actionList[:numMoves + 1]
+            np.random.shuffle(actionList)
+
+            i = 0
+            for _,action,_ in actionList[:numMoves+1]:
+                logging.info(f"evaluating action {i}")
+                i+=1
+                betterEvalActionPairs.append((self.realEvalAction(action,depth),action))
+            self.tri.updateGeometricProblems()
+
+            betterEvalActionPairs = sorted(betterEvalActionPairs,key=lambda x:x[0])
+            print([v for v,_ in betterEvalActionPairs])
+            for _,action in betterEvalActionPairs:
+                realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
+                if len(realAction.addedPointIds) == 0 and len(realAction.removedPointIds) == 0:
+                    for id in realAction.addedPointIds:
+                        self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
+                    for id in realAction.removedPointIds:
+                        self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
                     continue
+                actionAdded = True
+                actionStack.append(realAction)
                 break
-            if not actionAdded:
 
-                actionList = self.buildUnsafeActionList(False)
-                logging.info("identified " + str(len(actionList)) + " actions.")
-                # eval,bestUnsafeAction = actionList[0]
-                for eval, bestUnsafeAction, gp in actionList:
-
-                    # apply action
-                    for id in bestUnsafeAction.addedPointIds:
-                        self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id, 0) + 1
-                    for id in bestUnsafeAction.removedPointIds:
-                        self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id, 0) + 1
-
-                    safeAction = self.tri.applyUnsafeActionAndReturnSafeAction(bestUnsafeAction)
-                    if len(safeAction.addedPoints) > 0 or len(safeAction.removedPoints) > 0:
-                        if eval >= self.solver.cleanWeight:
-                            keepGoing = False
-                            break
-                        actionStack.append(safeAction)
-                        actionAdded = True
-                    else:
-                        logging.error("terror threat: " + str(
-                            [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.addedPointIds]) + " "+ str(
-                            [(id, self.convergenceDetectorDict[id]) for id in bestUnsafeAction.removedPointIds]))
-                        continue
-                    break
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
-            if plotUpdater == 5:
-                #self.tri.plotCoordinateQuality()
+            self.tri.plotTriangulation()
+            if plotUpdater == 1:
+            #    self.tri.plotCoordinateQuality()
                 self.tri.plotTriangulation()
                 plotUpdater = 0
             if not actionAdded:
@@ -2811,112 +2918,12 @@ class QualityImprover:
                     keepGoing = False
                 else:
                     logging.error("only increased convergence threat this iteration...")
-            continue
-
-            bestEval, bestSol, replacer = 0, None, None
-            # self.tri.plotTriangulation()
-            logging.debug("updating Geometric problems...")
-            self.tri.updateGeometricProblems()
-            np.random.shuffle(self.tri.geometricLinkProblems)
-            np.random.shuffle(self.tri.geometricCircleProblems)
-            np.random.shuffle(self.tri.geometricSegmentProblems)
-            logging.debug("completed updating Geometric problems")
-            logging.debug("drawing...")
-            self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
-            if plotUpdater == 1:
-                #self.tri.plotCoordinateQuality()
-                self.tri.plotTriangulation()
-                plotUpdater = 0
-            logging.debug("done drawing")
-            self.tri.validateTriangleMap()
-            #logging.debug("scraping through "+str(len(self.tri.geometricProblems))+" many geometric subproblems")
-
-            for gp in self.tri.geometricSubproblemIterator():
-                # gp.plotMe()
-                #start = time.time()
-                eval, sol = self.solver.solve(gp)
-                #print(f"{time.time()-start:.2f}")
-                #print(")",end="")
-                if eval != None and (bestEval == None or eval < bestEval):
-                    #check if we only redo a previous solution
-                    if len(sol) == len(gp.getInsideSteiners()):
-                        allInside = True
-                        for p in sol:
-                            inside = False
-                            for vIdx in gp.getInsideSteiners():
-                                if p == self.tri.point(vIdx):
-                                    inside = True
-                                    break
-                            if not inside:
-                                allInside = False
-                                break
-                        if allInside:
-                            #because of cardinality condition, this just replaces the inital inside steiners and is not actually a different solution
-                            continue
-                    logging.info("subproblem with eval " + str(eval) + " found")
-                    bestEval = eval
-                    bestSol = sol
-                    replacer = gp
-                    # curEdit = "altitude"
-
-            logging.debug("done scraping")
-
-            if bestEval >= self.solver.cleanWeight:
-                nonSuperseeded = self.tri.getNonSuperseededBadTris()  # list(np.where(self.tri.badTris == True)[0])
-                nonSuperseededMask = np.full(self.tri.badTris.shape, False)
-                nonSuperseededMask[nonSuperseeded] = True
-
-                if len(nonSuperseeded) == 0:
-                    keepGoing = False
-                    continue
-
-                added = False
-                # we add complicated ungör erten center
-                logging.debug("adding some complicated center...")
-                # np.random.shuffle(badTris)
-                dists = self.tri.combinatorialDepth()
-                centerFindIdx = None
-
-                #tolerance for distance selector
-                tolerance = 1
-                #setting this to zero could result in situations that do not converge. careful!
-                withOuterLayer = True
-
-                assert(tolerance >= 0)
-                mask = np.full(self.tri.badTris.shape, False)
-                mode = "fromInside" #"fromOutside"
-
-                if mode == "fromInside":
-                    val = np.max(dists[nonSuperseeded])
-                    mask |= (((dists >= val - tolerance)) & (nonSuperseededMask))
-                    if withOuterLayer:
-                        mask |= ((dists == 0) & (self.tri.badTris))
-
-                elif mode == "fromOutside":
-                    val = np.min(dists[nonSuperseeded])
-                    mask |= (((dists <= val + tolerance)) & (nonSuperseededMask))
-                    if withOuterLayer:
-                        mask |= ((dists == 0) & (self.tri.badTris))
-
-                locs = np.where(mask)[0]
-                np.random.shuffle(locs)
-                centerFindIdx = locs[0]
-
-                convergenceDetectorDict[centerFindIdx] = convergenceDetectorDict.get(centerFindIdx,0) + 1
-                added,action = self.addCenterOfTriangle(centerFindIdx,convergenceDetectorDict[centerFindIdx],dists[centerFindIdx])
-                if added:
-                    actionStack.append(action)
-
             else:
-                if self.tri.gpaxs != None:
-                    replacer.plotMe()
-                # lastEdit = curEdit
-                logging.info("replacing identified subproblem of type "+replacer.gpType)
-                added,action = self.tri.replaceEnclosement(replacer, bestSol)
-                if added:
-                    actionStack.append(action)
-                logging.info("done replacing")
-                self.tri.validateTriangleMap()
+                if len(self.tri.getNonSuperseededBadTris()) == 0:
+                    if convergenceEndCounter > 10:
+                        keepGoing = False
+                    else:
+                        convergenceEndCounter += 1
         self.tri.plotTriangulation()
         self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
         plt.pause(0.5)

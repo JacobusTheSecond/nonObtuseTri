@@ -59,7 +59,7 @@ def solveEveryInstance(solname="cur_solution.zip"):
     debugSeed = 580073460#754181797#267012647
     debugIdxs = None#[87]#[125]#[114]#64#7#8#88
     debugUID = None#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
-    withShow = False#True#True#True#(debugIdx != None) or (debugUID != None)
+    withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         matplotlib.use("TkAgg")
         fig = plt.figure()
@@ -219,6 +219,110 @@ def seeded_Multi():
                 print("some error occured")
 
         updateSummaries()
+
+def pooledWorkerFunction(index):
+    seedIdx = index // numInstances
+    instanceIdx = index % numInstances
+
+    seed = seeds[seedIdx]
+    instance = None
+
+    filepath = Path(__file__)
+    idb = InstanceDatabase(filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
+    i = 0
+    for ins in idb:
+        if i == instanceIdx:
+            instance = ins
+        else:
+            i += 1
+    assert(instance is not None)
+    lock.acquire()
+    times[multiprocessing.current_process()] = time.time()
+    currentInstance[multiprocessing.current_process()] = instanceIdx
+    lock.release()
+    tri = Triangulation(instance)
+    qi = QualityImprover(tri,seed=seed)
+    sol = qi.improve()
+    lock.acquire()
+    returner[seedIdx][instanceIdx] = sol
+    progress = np.array([len([v for v in l if v is not None]) for l in returner])
+    best[instanceIdx] = len(sol.steiner_points_x) if best[instanceIdx] < 0 else min(best[instanceIdx], len(sol.steiner_points_x))
+    if np.sum(progress) % 5 == 0:
+        print("PROGRESS:")
+        print(progress)
+        print("QUALITY:")
+        np.set_printoptions(linewidth=(4*30)+3,formatter={"all":lambda x: str(x).rjust(3)})
+        print(np.array(best))
+        print("TIMES:")
+        np.set_printoptions(linewidth=4 * (96 // 2) + 3, formatter={"all": lambda x: str(x).rjust(3)})
+        tts = np.array(times)
+        print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
+    times[multiprocessing.current_process()] = -1
+    currentInstance[multiprocessing.current_process()] = -1
+    lock.release()
+
+def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,the_progress,the_number):
+    global lock
+    lock = the_lock
+    global returner
+    returner = the_returner
+    global seeds
+    seeds = the_seeds
+    global best
+    best = the_best
+    global times
+    times = the_times
+    global currentInstance
+    currentInstance = the_progress
+    global numInstances
+    numInstances = the_number
+
+def seededPool():
+    numThreads = 8
+    numSeeds = 1
+    np.set_printoptions(linewidth=4*(96//2)+3,formatter={"all":lambda x: str(x).rjust(3)})
+    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
+    filepath = Path(__file__)
+    idb = InstanceDatabase(filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
+    manager = multiprocessing.Manager()
+    numInstances = len([None for _ in idb])
+    returner = manager.list([manager.list([None for _ in idb]) for i in range(numSeeds)])
+    best = manager.list([-1 for _ in idb])
+    times = manager.list([-1 for _ in range(numThreads)])
+    instanceNos = manager.list([-1 for _ in range(numThreads)])
+    np.random.seed(1337)
+    seeds = [np.random.randint(0,1000000000) for i in range(numSeeds)]
+    lock = manager.Lock()
+
+    with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,seeds,best,times,instanceNos,numInstances)) as pool:
+        result = pool.map_async(pooledWorkerFunction,range(numInstances*numSeeds),chunksize=1)
+
+        result.wait()
+        allSolutions = [[sol for sol in sols] for sols in returner]
+
+        solLoc = filepath.parent.parent / "instance_solutions" / "288CircleArr2InRNoSegs"
+        solLoc.mkdir(parents=True, exist_ok=True)
+        for i in range(len(allSolutions)):
+            solname = "seed"+str(seeds[i])+".zip"
+            solutions = allSolutions[i]
+
+            try:
+                for solution in solutions:
+                    instance = idb[solution.instance_uid]
+                    result = verify(instance, solution)
+                    print(f"{solution.instance_uid}: {result}")
+
+                if (solLoc / solname).exists():
+                    (solLoc / solname).unlink()
+                # Write the solutions to a new zip file
+                with ZipWriter(solLoc / solname) as zw:
+                    for solution in solutions:
+                        zw.add_solution(solution)
+            except:
+                print("some error occured")
+
+        updateSummaries()
+
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
