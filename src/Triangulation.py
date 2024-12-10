@@ -1,5 +1,6 @@
 import copy
 import itertools
+import time
 
 import numpy as np
 import matplotlib.ticker
@@ -65,6 +66,8 @@ class Triangulation:
         self.exactVerts = np.array(exactVerts, dtype=Point)
         self.numericVerts = np.array(numericVerts)
         self.isValidVertex = np.array([True for _ in self.numericVerts], dtype=bool)
+
+        self.inputPointTree = KDTree(numericVerts)
 
         self.vertexMap = [[] for _ in range(len(self.exactVerts))]
         for triIdx in range(len(self.triangles)):
@@ -161,6 +164,7 @@ class Triangulation:
         self.geometricCircleProblems = []
         self.geometricSegmentProblems = []
         self.updateGeometricProblems()
+        self.watch = 0
 
     ####
     # visualization and parsing
@@ -946,15 +950,7 @@ class Triangulation:
                 _addEdgeToStack(j, iIdx)
         # self.validate()
 
-    def addPoint(self, p: Point, preferedId = None):
-
-        #representation quality guard
-        if len(p.x().exact()) > 50000 or len(p.y().exact()) > 50000:
-            logging.error(str(self.seed) + " DANGEROUS LEVELS OF REPRESENTATION QUALITY FOR NEW POINT!!!")
-            return False
-
-        # first figure out, in which triangle the point lies. If inside, split into three, if on, split adjacent
-        # faces into two each
+    def uninformedGetHitTriIdxs(self,p:Point):
         hitTriIdxs = []
         grazedTriIdxs = []
         for triIdx in self.validTriIdxs():
@@ -963,6 +959,41 @@ class Triangulation:
                 hitTriIdxs.append([triIdx])
             elif hit == "on":
                 grazedTriIdxs.append([triIdx,colinearIndex])
+        return hitTriIdxs,grazedTriIdxs
+
+    def informedGetHitTriIdxs(self,p:Point):
+        numericalPoint = [float(p.x()),float(p.y())]
+        _,nn = self.inputPointTree.query(numericalPoint)
+        curTris = [triIdx for triIdx,_ in self.vertexMap[nn]]
+        #breadth first search until we hit a triangle the contains p.
+        touchedTris = set(curTris)
+        while len(curTris) > 0:
+            curTri = curTris.pop(0)
+            touchedTris.add(curTri)
+            #expand:
+            for i in range(3):
+                nIdx = self.triangleMap[curTri,i,0]
+                if nIdx == outerFace:
+                    continue
+                if nIdx in touchedTris:
+                    continue
+                curTris.append(nIdx)
+                touchedTris.add(nIdx)
+
+            hit, colinearIndex = self.pointHitsTriangle(curTri, p)
+            if hit == "inside":
+                return [[curTri]],[]
+            elif hit == "on":
+                if colinearIndex is None:
+                    return [],[]
+                if self.triangleMap[curTri,colinearIndex[0][0],0] == outerFace:
+                    return [],[[curTri,colinearIndex]]
+                elif colinearIndex != None:
+                    return [],[[curTri,colinearIndex],[self.triangleMap[curTri,colinearIndex[0][0],0],[[self.triangleMap[curTri,colinearIndex[0][0],1]]]]]
+                #grazedTriIdxs.append([triIdx, colinearIndex])
+
+
+    def insertPoint(self,p:Point,hitTriIdxs,grazedTriIdxs,preferedId = None):
         if len(hitTriIdxs) == 1:
             # inside
             assert (len(grazedTriIdxs) == 0)
@@ -1001,19 +1032,19 @@ class Triangulation:
             self.validateTriangleMap()
             self.validateVertexMap()
 
-            for triIdx in self.validTriIdxs():
-                for i in range(3):
-                    if not (self.triangleMap[triIdx, i, 0] != noneFace):
-                        print("och man")
-            self.ensureDelauney([hitTriIdx, newLeftIdx, newRightIdx])
+            #for triIdx in self.validTriIdxs():
+            #    for i in range(3):
+            #        if not (self.triangleMap[triIdx, i, 0] != noneFace):
+            #            print("och man")
+            #self.ensureDelauney()
             # self.ensureDelauney(None)
 
             # self.plotTriangulation()
 
-            return True,newPointIdx
+            return True,newPointIdx,[hitTriIdx, newLeftIdx, newRightIdx]
         elif len(grazedTriIdxs) == 0:
             # outside
-            return False,None
+            return False,None,[]
         elif len(grazedTriIdxs) == 1:
             # boundary
             assert (len(grazedTriIdxs[0][1]) == 1)
@@ -1053,12 +1084,12 @@ class Triangulation:
             self.validateTriangleMap()
             self.validateVertexMap()
 
-            self.ensureDelauney([grazedIdx, newTriIdx])
+            #self.ensureDelauney()
             # self.ensureDelauney(None)
 
             # self.plotTriangulation()
 
-            return True,newPointIdx
+            return True,newPointIdx,[grazedIdx, newTriIdx]
         elif len(grazedTriIdxs) == 2:
             # constraint or unlucky
             assert (len(grazedTriIdxs[0][1]) == 1)
@@ -1124,15 +1155,40 @@ class Triangulation:
             self.validateTriangleMap()
             self.validateVertexMap()
 
-            self.ensureDelauney([grazedAIdx, grazedBIdx, newTriByBIdx, newTriByAIdx])
+            #self.ensureDelauney()
             # self.ensureDelauney(None)
 
             # self.plotTriangulation()
 
-            return True,newPointIdx
+            return True,newPointIdx,[grazedAIdx, grazedBIdx, newTriByBIdx, newTriByAIdx]
         else:
             # vertex
-            return False,None
+            return False,None,[]
+
+
+    def addPoint(self, p: Point, preferedId = None):
+
+        start = time.time()
+        #representation quality guard
+        if len(p.x().exact()) > 50000 or len(p.y().exact()) > 50000:
+            logging.error(str(self.seed) + " DANGEROUS LEVELS OF REPRESENTATION QUALITY FOR NEW POINT!!!")
+            return False
+
+        hitTriIdxs,grazedTriIdxs = self.informedGetHitTriIdxs(p)
+        added,newIdx,touchedTriangles = self.insertPoint(p,hitTriIdxs, grazedTriIdxs, preferedId)
+        self.ensureDelauney(touchedTriangles)
+        self.watch += time.time() - start
+        return added,newIdx
+
+    def addPoints(self,ps):
+        touchedTris = []
+        for p in ps:
+            hits,grazeds = self.informedGetHitTriIdxs(p)
+            added,newIdx,touchedTriangles = self.insertPoint(p,hits, grazeds)
+            if added:
+                touchedTris += touchedTriangles
+        self.ensureDelauney(list(set(touchedTris)))
+        #return added,newIdx
 
     def internalMergePoints(self, source, target):
 
@@ -2237,7 +2293,10 @@ class Triangulation:
             return "inside",noneIntervalVertex
         elif np.all((sides == "left") | (sides == "colinear")) or np.all(
                 (sides == "right") | (sides == "colinear")):
-            return "on",np.argwhere(sides == "colinear")
+            if len(np.where(sides == "colinear")[0])== 1:
+                return "on",np.argwhere(sides == "colinear")
+            else:
+                return "on",None
         return "outside",noneIntervalVertex
 
     def getAllTruncatedCirclesIntersecting(self,triIdx):
@@ -2926,6 +2985,8 @@ class QualityImprover:
             betterEvalActionPairs = sorted(list(zip(actionValues,[action for _,action,_ in actionList])),key=lambda x:x[0])
             #print([v for v,_ in betterEvalActionPairs])
             for _,action in betterEvalActionPairs:
+                if np.min([self.convergenceDetectorDict.get(id,0) for id in action.addedPointIds] + [self.convergenceDetectorDict.get(id,0) for id in action.addedPointIds]) > 30:
+                    continue
                 realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
                 if len(realAction.addedPointIds) == 0 and len(realAction.removedPointIds) == 0:
                     for id in action.addedPointIds:
@@ -2937,6 +2998,8 @@ class QualityImprover:
                 actionStack.append(realAction)
                 break
 
+            #print(self.tri.watch)
+            self.tri.watch=0
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
             self.tri.plotTriangulation()
             if plotUpdater == 1:
@@ -2960,25 +3023,50 @@ class QualityImprover:
         return self.tri.solutionParse()
 
 class SolutionMerger:
-    def __init__(self, triPool):
+    def __init__(self, instance,triPool):
         self.triPool = triPool
         #self.solver = StarSolver(2,1,1,1.25,2,2,2)
-        self.kdPool = [KDTree(tri.numericVerts) for tri in triPool]
+        self.instance = instance
+        self.instancesize = len(instance.points_x)
+        self.kdPool = [KDTree(tri.numericVerts[self.instancesize:]) for tri in triPool]
 
     def attemptImprovement(self,tri:Triangulation):
-        myKDTree = KDTree(tri.numericVerts)
+        assert(len(tri.validVertIdxs()) == len(tri.exactVerts))#for now
+        myKDTree = KDTree(tri.numericVerts[self.instancesize:])
         for x in tri.numericVerts:
             for y in tri.numericVerts:
                 diff = y-x
                 r = np.sqrt((diff[0]*diff[0]) + (diff[1]*diff[1]))
-                myInsidePoints = kdTree.query_ball_point(x,r)
-                if len(myInsidePoints) <= 1:
+                myInsidePoints = myKDTree.query_ball_point(x,r)
+                if len(myInsidePoints) <= 2:
                     continue
-                for kdTree in self.kdPool:
+                if len(myInsidePoints)*5 > len(tri.numericVerts[self.instancesize:]):
+                    continue
+                for kdTree,triang in zip(self.kdPool,self.triPool):
                     inside = kdTree.query_ball_point(x,r)
+                    if len(inside) == 0:
+                        continue
                     if len(inside) < len(myInsidePoints):
-                        #attempt to replace
+                        print("attempting improvement...")
                         pass
+                        #build new triangulation and improve it...
+                        tr = Triangulation(self.instance)
+                        insertSteinerpoints = []
+                        for i in range(self.instancesize,len(tri.exactVerts)):
+                            if i in myInsidePoints:
+                                continue
+                            insertSteinerpoints.append(tri.point(i))
+                        for i in inside:
+                            insertSteinerpoints.append(triang.point(i))
+                        tr.addPoints(insertSteinerpoints)
+                        qi = QualityImprover(tr)
+                        tr = qi.improve()
+                        if len(tri.validVertIdxs()) < len(tri.exactVerts):
+                            print("found improvement!!!")
+
+
+
+
 
 
 
