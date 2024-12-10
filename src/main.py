@@ -12,7 +12,6 @@ import numpy as np
 
 
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
-from streamlit.elements.form import current_form_id
 
 from solutionManagement import updateSummaries
 
