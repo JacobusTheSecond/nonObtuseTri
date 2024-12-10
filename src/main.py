@@ -221,23 +221,15 @@ def seeded_Multi():
         updateSummaries()
 
 def pooledWorkerFunction(index):
+    lock.acquire()
+    logging.error(f"started thread {multiprocessing.current_process()}")
+    lock.release()
     seedIdx = index // numInstances
     instanceIdx = index % numInstances
     seed = seeds[seedIdx]
-    instance = None
-
-    filepath = Path(__file__)
-    idb = InstanceDatabase(filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
-    i = 0
-    for ins in idb:
-        if i == instanceIdx:
-            instance = ins
-        else:
-            i += 1
-    assert(instance is not None)
-
+    instance = instanceList[instanceIdx]
     lock.acquire()
-    logging.error(f"{multiprocessing.current_process()} working on instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
+    logging.error(f"{multiprocessing.current_process()}: working on instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
     times[multiprocessing.current_process()] = time.time()
     currentInstance[multiprocessing.current_process()] = instanceIdx
     lock.release()
@@ -262,7 +254,7 @@ def pooledWorkerFunction(index):
     currentInstance[multiprocessing.current_process()] = -1
     lock.release()
 
-def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,the_progress,the_number):
+def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,the_progress,the_number,the_instances):
     global lock
     lock = the_lock
     global returner
@@ -277,6 +269,8 @@ def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,
     currentInstance = the_progress
     global numInstances
     numInstances = the_number
+    global instanceList
+    instanceList = the_instances
 
 def seededPool():
     numThreads = 8
@@ -296,7 +290,7 @@ def seededPool():
     seeds = [np.random.randint(0,1000000000) for i in range(numSeeds)]
     lock = manager.Lock()
 
-    with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,seeds,best,times,instanceNos,numInstances)) as pool:
+    with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,seeds,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledWorkerFunction,range(numInstances*numSeeds),chunksize=1)
 
         result.wait()
