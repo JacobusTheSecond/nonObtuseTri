@@ -2894,7 +2894,7 @@ class QualityImprover:
             self.tri.updateGeometricProblems()
 
             betterEvalActionPairs = sorted(betterEvalActionPairs,key=lambda x:x[0])
-            print([v for v,_ in betterEvalActionPairs])
+            #print([v for v,_ in betterEvalActionPairs])
             for _,action in betterEvalActionPairs:
                 realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
                 if len(realAction.addedPointIds) == 0 and len(realAction.removedPointIds) == 0:
