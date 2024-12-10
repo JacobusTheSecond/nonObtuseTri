@@ -223,7 +223,6 @@ def seeded_Multi():
 def pooledWorkerFunction(index):
     seedIdx = index // numInstances
     instanceIdx = index % numInstances
-
     seed = seeds[seedIdx]
     instance = None
 
@@ -236,6 +235,10 @@ def pooledWorkerFunction(index):
         else:
             i += 1
     assert(instance is not None)
+
+    lock.acquire()
+    logging.error(f"{multiprocessing.current_process()} working on instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
+
     lock.acquire()
     times[multiprocessing.current_process()] = time.time()
     currentInstance[multiprocessing.current_process()] = instanceIdx
@@ -286,6 +289,7 @@ def seededPool():
     idb = InstanceDatabase(filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
     manager = multiprocessing.Manager()
     numInstances = len([None for _ in idb])
+    logging.error(f"number of isntances: {numInstances}")
     returner = manager.list([manager.list([None for _ in idb]) for i in range(numSeeds)])
     best = manager.list([-1 for _ in idb])
     times = manager.list([-1 for _ in range(numThreads)])
