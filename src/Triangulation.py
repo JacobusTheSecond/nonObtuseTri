@@ -2985,6 +2985,8 @@ class QualityImprover:
             betterEvalActionPairs = sorted(list(zip(actionValues,[action for _,action,_ in actionList])),key=lambda x:x[0])
             #print([v for v,_ in betterEvalActionPairs])
             for _,action in betterEvalActionPairs:
+                if len(action.addedPointIds) == 0 and len(action.removedPointIds) == 0:
+                    continue
                 if np.min([self.convergenceDetectorDict.get(id,0) for id in action.addedPointIds] + [self.convergenceDetectorDict.get(id,0) for id in action.addedPointIds]) > 30:
                     continue
                 realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
