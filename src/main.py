@@ -287,7 +287,7 @@ def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,
 
 def seededPool():
     numThreads = 96
-    numSeeds = 4
+    numSeeds = 1
     np.set_printoptions(linewidth=4*(96//2)+3,formatter={"all":lambda x: str(x).rjust(3)})
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     filepath = Path(__file__)
@@ -309,7 +309,7 @@ def seededPool():
         result.wait()
         allSolutions = [[sol for sol in sols] for sols in returner]
 
-        solLoc = filepath.parent.parent / "instance_solutions" / "288CircleArr2InRNoSegs"
+        solLoc = filepath.parent.parent / "instance_solutions" / "withDepth1"
         solLoc.mkdir(parents=True, exist_ok=True)
         for i in range(len(allSolutions)):
             solname = "seed"+str(seeds[i])+".zip"
