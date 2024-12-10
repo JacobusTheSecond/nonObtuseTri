@@ -15,7 +15,7 @@ from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter,
 from cgshop2025_pyutils.geometry import Point, FieldNumber
 
 from solutionManagement import updateSummaries
-from src.Triangulation import SolutionMerger
+from Triangulation import SolutionMerger
 
 exact = True
 if exact:
