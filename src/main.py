@@ -258,7 +258,7 @@ def pooledWorkerFunction(index):
         np.set_printoptions(linewidth=4 * (96 // 2) + 3, formatter={"all": lambda x: str(x).rjust(3)})
         tts = np.array(times)
         print("CURRENT ID:")
-        print(currentInstance)
+        print(np.array(currentInstance))
         print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
     times[myIdx] = -1
     currentInstance[myIdx] = -1
