@@ -309,7 +309,7 @@ def seededPool():
         result.wait()
         allSolutions = [[sol for sol in sols] for sols in returner]
 
-        solLoc = filepath.parent.parent / "instance_solutions" / "withDepth1"
+        solLoc = filepath.parent.parent / "instance_solutions" / "withDepth0Greedy"
         solLoc.mkdir(parents=True, exist_ok=True)
         for i in range(len(allSolutions)):
             solname = "seed"+str(seeds[i])+".zip"
