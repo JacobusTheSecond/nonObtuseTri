@@ -248,7 +248,7 @@ def pooledWorkerFunction(index):
     returner[seedIdx][instanceIdx] = sol
     progress = np.array([len([v for v in l if v is not None]) for l in returner])
     best[instanceIdx] = len(sol.steiner_points_x) if best[instanceIdx] < 0 else min(best[instanceIdx], len(sol.steiner_points_x))
-    if np.sum(progress) % 5 == 0:
+    if np.sum(progress) % 1 == 0:
         print("PROGRESS:")
         print(progress)
         print("QUALITY:")
@@ -284,7 +284,7 @@ def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,
     instanceList = the_instances
 
 def seededPool():
-    numThreads = 8
+    numThreads = 96
     numSeeds = 1
     np.set_printoptions(linewidth=4*(96//2)+3,formatter={"all":lambda x: str(x).rjust(3)})
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
