@@ -68,6 +68,29 @@ def loadSolutions(foldername):
 
     return best
 
+def loadBestOfSummaries():
+    filepath = Path(__file__)
+    idb = InstanceDatabase(filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
+    summaryFolder = filepath.parent.parent / "solution_summaries"
+    solutions = []
+    best = None
+    for summary in summaryFolder.iterdir():
+        if ".zip" in summary.name:
+            if best == None:
+                best = []
+                for solution in ZipSolutionIterator(summary):
+                    best.append(solution)
+            else:
+                i = 0
+                for solution in ZipSolutionIterator(summary):
+                    if i == 0:
+                        print(len(solution.steiner_points_x))
+                    if len(solution.steiner_points_x) < len(best[i].steiner_points_x):
+                        best[i] = solution
+                    i += 1
+    return best
+
+
 def updateSummaries():
     best = None
     filepath = Path(__file__)
@@ -81,11 +104,21 @@ def updateSummaries():
             else:
                 i = 0
                 for solution,_ in sol:
-                    if len(best[i].steiner_points_x) < len(best[i].steiner_points_x):
+                    if i == 0:
+                        print(len(solution.steiner_points_x))
+                    if len(solution.steiner_points_x) < len(best[i].steiner_points_x):
                         best[i] = solution
                     i += 1
+    #if best == None:
+    #    return
+    bestOfSummaries = loadBestOfSummaries()
     if best == None:
-        return
+        best = bestOfSummaries
+    i = 0
+    for b,other in zip(best,bestOfSummaries):
+        if len(other.steiner_points_x) < len(b.steiner_points_x):
+            best[i] = other
+        i += 1
 
     bestName = (filepath.parent.parent/"solution_summaries"/"best.zip")
 
