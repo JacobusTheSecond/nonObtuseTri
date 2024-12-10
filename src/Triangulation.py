@@ -2928,9 +2928,9 @@ class QualityImprover:
             for _,action in betterEvalActionPairs:
                 realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
                 if len(realAction.addedPointIds) == 0 and len(realAction.removedPointIds) == 0:
-                    for id in realAction.addedPointIds:
+                    for id in action.addedPointIds:
                         self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
-                    for id in realAction.removedPointIds:
+                    for id in action.removedPointIds:
                         self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
                     continue
                 actionAdded = True
@@ -2963,6 +2963,23 @@ class SolutionMerger:
     def __init__(self, triPool):
         self.triPool = triPool
         #self.solver = StarSolver(2,1,1,1.25,2,2,2)
+        self.kdPool = [KDTree(tri.numericVerts) for tri in triPool]
+
+    def attemptImprovement(self,tri:Triangulation):
+        myKDTree = KDTree(tri.numericVerts)
+        for x in tri.numericVerts:
+            for y in tri.numericVerts:
+                diff = y-x
+                r = np.sqrt((diff[0]*diff[0]) + (diff[1]*diff[1]))
+                myInsidePoints = kdTree.query_ball_point(x,r)
+                if len(myInsidePoints) <= 1:
+                    continue
+                for kdTree in self.kdPool:
+                    inside = kdTree.query_ball_point(x,r)
+                    if len(inside) < len(myInsidePoints):
+                        #attempt to replace
+                        pass
+
 
 
 
