@@ -238,8 +238,6 @@ def pooledWorkerFunction(index):
 
     lock.acquire()
     logging.error(f"{multiprocessing.current_process()} working on instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
-
-    lock.acquire()
     times[multiprocessing.current_process()] = time.time()
     currentInstance[multiprocessing.current_process()] = instanceIdx
     lock.release()
