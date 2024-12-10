@@ -289,7 +289,7 @@ def seededPool():
     np.random.seed(1337)
     seeds = [np.random.randint(0,1000000000) for i in range(numSeeds)]
     lock = manager.Lock()
-
+    logging.error("staring up pool...")
     with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,seeds,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledWorkerFunction,range(numInstances*numSeeds),chunksize=1)
 
