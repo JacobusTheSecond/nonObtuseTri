@@ -9,7 +9,8 @@ from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 
 import exact_geometry as eg
 from constants import *
-from GeometricSubproblem import GeometricSubproblem, StarSolver
+from GeometricSubproblem import GeometricSubproblem, StarSolver#
+from scipy.spatial import KDTree
 
 import triangle as tr  # https://rufat.be/triangle/
 
@@ -620,6 +621,7 @@ class Triangulation:
         state["segments"] = np.copy(self.segments)
         state["isValidVertex"] = np.copy(self.isValidVertex)
         state["segmentType"] = np.copy(self.segmentType)
+        state["pointTopologyChanged"] = np.copy(self.pointTopologyChanged)
         return state
 
     def applyCombinatorialState(self,state):
@@ -637,6 +639,8 @@ class Triangulation:
         self.segments = np.copy(state["segments"])
         self.isValidVertex = np.copy(state["isValidVertex"])
         self.segmentType = np.copy(state["segmentType"])
+        self.pointTopologyChanged = np.copy(state["pointTopologyChanged"])
+
 
         # need to repopulate empty rows to stay consistent. maybe in future change combinatorial state as well...
         #hopefuly we only need to update vertex based rows...
@@ -802,11 +806,12 @@ class Triangulation:
         self.rebaseTriangleState()
 
 
-    def updateGeometricProblems(self):
+    def updateGeometricProblems(self,fastAndGreedy=False):
         self.updateGeometricFaceProblems()
         #self.updateGeometricSegmentProblems()
         self.updateGeometricLinkProblems()
-        self.updateGeometricCircleProblems()
+        if not fastAndGreedy:
+            self.updateGeometricCircleProblems()
 
     def geometricSubproblemIterator(self):
         return itertools.chain(self.geometricCircleProblems,self.geometricSegmentProblems,self.geometricFaceProblems,self.geometricLinkProblems)
@@ -2589,7 +2594,7 @@ class QualityImprover:
             for r in specialRounds:
                 ax.plot([r,r],[b,t],color="blue")
 
-    def buildUnsafeActionList(self,earlyStoppingAllowed:int,onlyChanged=False):
+    def buildUnsafeActionList(self,earlyStoppingAllowed:int,onlyChanged=False,fastAndGreedy=False):
         actionList = []
         hasGoodSolution = False
 
@@ -2597,7 +2602,7 @@ class QualityImprover:
         if onlyChanged:
             nonSuperseeded = np.array([id for id in nonSuperseeded if self.tri.triangleChanged[id]])
 
-        self.tri.updateGeometricProblems()
+        self.tri.updateGeometricProblems(fastAndGreedy)
 
         #geometricsubproblem induced actions
         np.random.shuffle(self.tri.geometricLinkProblems)
@@ -2697,7 +2702,30 @@ class QualityImprover:
         for gp in self.tri.geometricSubproblemIterator():
             self.solver.solve(gp)
 
-    def realEvalAction(self,action:TriangulationAction,depth:int):
+    def realEvalActionList(self,unsafeActions,depth:int):
+        if depth == 0:
+            result = []
+            combinatorialState = self.tri.copyOfCombinatorialState()
+            for action in unsafeActions:
+
+                realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
+                result.append(self.eval())
+
+                #afterwards vertex state should be the same...
+                self.tri.undoAction(realAction)
+                #and then combinatorial state is the same as well hopefully
+                self.tri.applyCombinatorialState(combinatorialState)
+            return result
+        else:
+            result = []
+            for action in unsafeActions:
+                result.append(self.realEvalAction(action,depth,True))
+            return result
+
+
+
+
+    def realEvalAction(self,action:TriangulationAction,depth:int,fastAndGreedy=False):
         assert(depth >= 0)
         actualAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
         myEval = -1
@@ -2705,7 +2733,7 @@ class QualityImprover:
             myEval = self.eval()
         elif depth == 1:
 
-            unsafeSubactions = self.buildUnsafeActionList(-1, True)
+            unsafeSubactions = self.buildUnsafeActionList(-1, True,fastAndGreedy)
             combinatorialState = self.tri.copyOfCombinatorialState()
             #print(" "*(3-depth) + str(len(unsafeSubactions)))
 
@@ -2728,7 +2756,7 @@ class QualityImprover:
 
         else:
             #deep eval
-            unsafeSubactions = self.buildUnsafeActionList(-1, True)
+            unsafeSubactions = self.buildUnsafeActionList(-1, True,fastAndGreedy)
             #print(" "*(3-depth) + str(len(unsafeSubactions)))
 
             #if we have actions:
@@ -2742,7 +2770,7 @@ class QualityImprover:
                 myEval = self.eval()
 
         self.tri.undoAction(actualAction)
-        self.tri.updateGeometricProblems()
+        self.tri.updateGeometricProblems(fastAndGreedy)
         return myEval
 
     def addCenterOfTriangle(self,id,threat,depth):
@@ -2876,7 +2904,7 @@ class QualityImprover:
             #get best action
             #TODO: add early stopping up to k
             numMoves = 15
-            actionList = self.buildUnsafeActionList(numMoves,False)
+            actionList = self.buildUnsafeActionList(numMoves,False,False)
             logging.info("identified " + str(len(actionList)) +" actions.")
             actionAdded = False
 
@@ -2886,14 +2914,16 @@ class QualityImprover:
             actionList = actionList[:numMoves + 1]
             np.random.shuffle(actionList)
 
-            i = 0
-            for _,action,_ in actionList[:numMoves+1]:
-                logging.info(f"evaluating action {i}")
-                i+=1
-                betterEvalActionPairs.append((self.realEvalAction(action,depth),action))
-            self.tri.updateGeometricProblems()
+            actionValues = self.realEvalActionList([action for _,action,_ in actionList],depth)
 
-            betterEvalActionPairs = sorted(betterEvalActionPairs,key=lambda x:x[0])
+            #i = 0
+            #for _,action,_ in actionList[:numMoves+1]:
+            #    logging.info(f"evaluating action {i}")
+            #    i+=1
+            #    betterEvalActionPairs.append((self.realEvalAction(action,depth),action))
+            #self.tri.updateGeometricProblems()
+
+            betterEvalActionPairs = sorted(list(zip(actionValues,[action for _,action,_ in actionList])),key=lambda x:x[0])
             #print([v for v,_ in betterEvalActionPairs])
             for _,action in betterEvalActionPairs:
                 realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
@@ -2928,3 +2958,11 @@ class QualityImprover:
         self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
         plt.pause(0.5)
         return self.tri.solutionParse()
+
+class SolutionMerger:
+    def __init__(self, triPool):
+        self.triPool = triPool
+        #self.solver = StarSolver(2,1,1,1.25,2,2,2)
+
+
+
