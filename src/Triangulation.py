@@ -2987,7 +2987,7 @@ class QualityImprover:
             for _,action in betterEvalActionPairs:
                 if len(action.addedPointIds) == 0 and len(action.removedPointIds) == 0:
                     continue
-                if np.min([self.convergenceDetectorDict.get(id,0) for id in action.addedPointIds] + [self.convergenceDetectorDict.get(id,0) for id in action.addedPointIds]) > 30:
+                if np.min([self.convergenceDetectorDict.get(id,0) for id in action.addedPointIds] + [self.convergenceDetectorDict.get(id,0) for id in action.removedPointIds]) > 30:
                     continue
                 realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
                 if len(realAction.addedPointIds) == 0 and len(realAction.removedPointIds) == 0:
