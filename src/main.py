@@ -12,6 +12,7 @@ import numpy as np
 
 
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
+from streamlit.elements.form import current_form_id
 
 from solutionManagement import updateSummaries
 
@@ -229,9 +230,17 @@ def pooledWorkerFunction(index):
     seed = seeds[seedIdx]
     instance = instanceList[instanceIdx]
     lock.acquire()
-    logging.error(f"{multiprocessing.current_process()}: working on instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
-    times[multiprocessing.current_process()] = time.time()
-    currentInstance[multiprocessing.current_process()] = instanceIdx
+    myId = -1
+    for cIdx in range(len(currentInstance)):
+        if currentInstance[cIdx] == -1:
+            myIdx = cIdx
+            break
+    assert(myIdx != -1)
+
+    logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
+
+    times[myIdx] = time.time()
+    currentInstance[myIdx] = instanceIdx
     lock.release()
     tri = Triangulation(instance)
     qi = QualityImprover(tri,seed=seed)
@@ -250,8 +259,11 @@ def pooledWorkerFunction(index):
         np.set_printoptions(linewidth=4 * (96 // 2) + 3, formatter={"all": lambda x: str(x).rjust(3)})
         tts = np.array(times)
         print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
-    times[multiprocessing.current_process()] = -1
-    currentInstance[multiprocessing.current_process()] = -1
+    times[myIdx] = -1
+    currentInstance[myIdx] = -1
+
+    logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
+
     lock.release()
 
 def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,the_progress,the_number,the_instances):
