@@ -2470,7 +2470,7 @@ class Triangulation:
                     #need to replace this boundarypiece
                     nextF,nextI = self.triangleMap[boundaryedge[0],boundaryedge[1],0],self.triangleMap[boundaryedge[0],boundaryedge[1],1]
                     if nextF in expanded:
-                        logging.error("circle expansion detected...")
+                        logging.error(f"{self.instance_uid}: circle expansion detected...")
                         return None
                     nexttwo = [[nextF,(nextI+1)%3],[nextF,(nextI+2)%3]]
                     if self.triangles[nexttwo[0][0],nexttwo[0][1]] not in nextedgeAsIdxs:
@@ -2676,6 +2676,8 @@ class QualityImprover:
             if sol != None:
                 if eval < self.solver.cleanWeight:
                     hasGoodSolution = True
+                if len(sol) == 0 and len(gp.getInsideSteiners()) == 0:
+                    continue
                 actionList.append((eval,TriangulationAction(sol,[-1 for _ in sol],[],gp.getInsideSteiners(),False),gp))
         if hasGoodSolution and earlyStoppingAllowed != -1 and len(actionList) > earlyStoppingAllowed :
             return sorted(actionList,key=lambda x:x[0])
