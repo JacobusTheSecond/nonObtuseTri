@@ -2971,7 +2971,7 @@ class QualityImprover:
 
             betterEvalActionPairs = []
 
-            depth = 0
+            depth = 1
             actionList = actionList[:numMoves + 1]
             np.random.shuffle(actionList)
 
