@@ -991,7 +991,7 @@ class Triangulation:
                 elif colinearIndex != None:
                     return [],[[curTri,colinearIndex],[self.triangleMap[curTri,colinearIndex[0][0],0],[[self.triangleMap[curTri,colinearIndex[0][0],1]]]]]
                 #grazedTriIdxs.append([triIdx, colinearIndex])
-
+        return self.uninformedGetHitTriIdxs(p)
 
     def insertPoint(self,p:Point,hitTriIdxs,grazedTriIdxs,preferedId = None):
         if len(hitTriIdxs) == 1:
