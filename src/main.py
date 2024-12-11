@@ -243,31 +243,37 @@ def pooledWorkerFunction(index):
     times[myIdx] = time.time()
     currentInstance[myIdx] = instanceIdx
     lock.release()
-    tri = Triangulation(instance)
-    qi = QualityImprover(tri,seed=seed)
-    sol = qi.improve()
-    lock.acquire()
-    returner[seedIdx][instanceIdx] = sol
-    progress = np.array([len([v for v in l if v is not None]) for l in returner])
-    best[instanceIdx] = len(sol.steiner_points_x) if best[instanceIdx] < 0 else min(best[instanceIdx], len(sol.steiner_points_x))
-    if np.sum(progress) % 1 == 0:
-        print("PROGRESS:")
-        print(progress)
-        print("QUALITY:")
-        np.set_printoptions(linewidth=(4*30)+3,formatter={"all":lambda x: str(x).rjust(3)})
-        print(np.array(best))
-        print("TIMES:")
-        np.set_printoptions(linewidth=4 * (96 // 2) + 3, formatter={"all": lambda x: str(x).rjust(3)})
-        tts = np.array(times)
-        print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
-        print("CURRENT ID:")
-        print(np.array(currentInstance))
-    times[myIdx] = -1
-    currentInstance[myIdx] = -1
-
-    logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
-
-    lock.release()
+    sol = None
+    try:
+        tri = Triangulation(instance)
+        qi = QualityImprover(tri,seed=seed)
+        sol = qi.improve()
+    except:
+        logging.error("some error occured...")
+    else:
+        lock.acquire()
+        returner[seedIdx][instanceIdx] = sol
+        progress = np.array([len([v for v in l if v is not None]) for l in returner])
+        best[instanceIdx] = len(sol.steiner_points_x) if best[instanceIdx] < 0 else min(best[instanceIdx], len(sol.steiner_points_x))
+        if np.sum(progress) % 1 == 0:
+            print("PROGRESS:")
+            print(progress)
+            print("QUALITY:")
+            np.set_printoptions(linewidth=(4*30)+3,formatter={"all":lambda x: str(x).rjust(3)})
+            print(np.array(best))
+            print("TIMES:")
+            np.set_printoptions(linewidth=4 * (96 // 2) + 3, formatter={"all": lambda x: str(x).rjust(3)})
+            tts = np.array(times)
+            print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
+            print("CURRENT ID:")
+            print(np.array(currentInstance))
+        lock.release()
+    finally:
+        lock.acquire()
+        times[myIdx] = -1
+        currentInstance[myIdx] = -1
+        logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
+        lock.release()
 
 def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,the_progress,the_number,the_instances):
     global lock
