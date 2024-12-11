@@ -2981,7 +2981,7 @@ class QualityImprover:
             #    i+=1
             #    betterEvalActionPairs.append((self.realEvalAction(action,depth),action))
             #self.tri.updateGeometricProblems()
-
+            maxConvergenceThisRound = -1
             betterEvalActionPairs = sorted(list(zip(actionValues,[action for _,action,_ in actionList])),key=lambda x:x[0])
             #print([v for v,_ in betterEvalActionPairs])
             for _,action in betterEvalActionPairs:
@@ -2993,8 +2993,10 @@ class QualityImprover:
                 if len(realAction.addedPointIds) == 0 and len(realAction.removedPointIds) == 0:
                     for id in action.addedPointIds:
                         self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
+                        maxConvergenceThisRound = max(maxConvergenceThisRound,self.convergenceDetectorDict[id])
                     for id in action.removedPointIds:
                         self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
+                        maxConvergenceThisRound = max(maxConvergenceThisRound,self.convergenceDetectorDict[id])
                     continue
                 actionAdded = True
                 actionStack.append(realAction)
@@ -3012,7 +3014,7 @@ class QualityImprover:
                 if len(self.tri.getNonSuperseededBadTris()) == 0:
                     keepGoing = False
                 else:
-                    logging.error("only increased convergence threat this iteration...")
+                    logging.error(f"{self.tri.instance_uid}: only increased convergence threat this iteration to {maxConvergenceThisRound}...")
             else:
                 if len(self.tri.getNonSuperseededBadTris()) == 0:
                     if convergenceEndCounter > 10:
@@ -3049,27 +3051,22 @@ class SolutionMerger:
                     if len(inside) == 0:
                         continue
                     if len(inside) < len(myInsidePoints):
-                        print("attempting improvement...")
+                        print("attempting improvement... ",end="")
                         pass
                         #build new triangulation and improve it...
                         tr = Triangulation(self.instance)
                         insertSteinerpoints = []
                         for i in range(self.instancesize,len(tri.exactVerts)):
-                            if i in myInsidePoints:
+                            if (i-self.instancesize) in myInsidePoints:
                                 continue
                             insertSteinerpoints.append(tri.point(i))
                         for i in inside:
-                            insertSteinerpoints.append(triang.point(i))
+                            insertSteinerpoints.append(triang.point(self.instancesize+i))
+                        print(f" of {self.instancesize + len(insertSteinerpoints)} vs {len(tri.exactVerts)}...",end="")
                         tr.addPoints(insertSteinerpoints)
                         qi = QualityImprover(tr)
                         tr = qi.improve()
-                        if len(tri.validVertIdxs()) < len(tri.exactVerts):
+                        if len(tr.steiner_points_x) + self.instancesize < len(tri.exactVerts):
                             print("found improvement!!!")
-
-
-
-
-
-
-
-
+                        else:
+                            print(f"imprvement failed at {len(tr.steiner_points_x) + self.instancesize} >= {len(tri.exactVerts)}")
