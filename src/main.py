@@ -275,7 +275,7 @@ def pooledWorkerFunction(index):
         lock.acquire()
         times[myIdx] = -1
         currentInstance[myIdx] = -1
-        logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed}")
+        logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished instanceId {instanceIdx} of name {instance.instance_uid} with seed {seed} with {len(qi.tri.getNonSuperseededBadTris())} bad tris.")
         lock.release()
 
 def init_real_pool_processes(the_lock,the_returner,the_seeds,the_best,the_times,the_progress,the_number,the_instances):
