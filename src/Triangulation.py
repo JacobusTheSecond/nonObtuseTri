@@ -12,16 +12,96 @@ import exact_geometry as eg
 from constants import *
 from GeometricSubproblem import GeometricSubproblem, StarSolver#
 from scipy.spatial import KDTree
+from KDTree import KDTree as MyBadKDTree
+from KDTree import combinatorialKDTree
 
 import triangle as tr  # https://rufat.be/triangle/
 
 import logging
 
+from bisect import bisect, insort
+
+class UniqueIDManagerAndPool:
+    def __init__(self):
+        self.nextId = 0
+        self.sortedPointLocations = []
+        self.objectPool = []
+        self.idMap = dict()
+        self.halfstateCounter = 0
+        self.stateCounter = 0
+
+    def safeAddPoint(self,point):
+        i = bisect(self.sortedPointLocations, (point.x(),point.y()),key=lambda id:(self.objectPool[id].x(),self.objectPool[id].y()))
+        if 1 <= i <= len(self.sortedPointLocations) and self.objectPool[self.sortedPointLocations[i-1]] == point:
+            return self.sortedPointLocations[i-1]
+        else:
+            self.objectPool.append(point)
+            myId = self.nextId
+            self.sortedPointLocations = self.sortedPointLocations[:i] + [myId] + self.sortedPointLocations[i:]
+
+            self.nextId += 1
+            return myId
+
+    def addPoints(self,points):
+        return [self.safeAddPoint(point) for point in points]
+
+    def hasPoint(self,point):
+        i = bisect(self.sortedPointLocations, (point.x(),point.y()),key=lambda id:(self.objectPool[id].x(),self.objectPool[id].y()))
+        return 1 <= i <= len(self.sortedPointLocations) and self.objectPool[self.sortedPointLocations[i-1]] == point
+
+    def getPointId(self,point):
+        i = bisect(self.sortedPointLocations, (point.x(),point.y()),key=lambda id:(self.objectPool[id].x(),self.objectPool[id].y()))
+        return self.sortedPointLocations[i-1]
+
+    def addKeyObjectPair(self,key,obj):
+        assert(isinstance(key,tuple))
+        if key in self.idMap.keys():
+            assert(False)
+
+        #create new object in pool and init map
+        self.objectPool.append(obj)
+        myId = self.nextId
+        self.idMap[key] = myId
+
+        self.nextId += 1
+        return myId
+
+    def addObject(self,obj):
+        self.objectPool.append(obj)
+        myId = self.nextId
+
+        self.nextId += 1
+        return myId
+
+    def safeAddKeyObjectPair(self,key,obj):
+        if self.hasKey(key):
+            return self.idMap[key]
+        else:
+            return self.addKeyObjectPair(key,obj)
+
+    def overwriteValueOfKey(self,key,obj):
+        self.objectPool[self.idMap[key]] = obj
+
+    def addKeyObjectPairList(self,keys,objs):
+        return [self.safeAddKeyObjectPair(key,obj) for key,obj in zip(keys,objs)]
+
+    def hasKey(self,key):
+        assert(isinstance(key,tuple))
+        return key in self.idMap.keys()
+
+    def getById(self,id):
+        return self.objectPool[id]
+
+    def getByKey(self,key):
+        assert(isinstance(key,tuple))
+        return self.objectPool[self.idMap[key]]
 
 class Triangulation:
-    def __init__(self, instance: Cgshop2025Instance, withValidate=False, seed=0, axs=None):
+    def __init__(self, instance: Cgshop2025Instance, withValidate=False, seed=0, axs=None,withGeometricUpdate=True,steinerpoints = None):
         if axs == None:
             axs = [None,None,None,None,None]
+
+        self.uniqueIDManager = UniqueIDManagerAndPool()
 
         #_, gpaxs = plt.subplots(1,1)
         self.histoaxs = axs[1]
@@ -33,7 +113,10 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = self.withValidate
+        self.plotWithIds = True#self.withValidate
+
+        self.circlesUpdatedAfterModification = False
+        self.linksUpdatedAfterModification = False
 
         def convert(data: Cgshop2025Instance):
             # convert to triangulation type
@@ -60,12 +143,16 @@ class Triangulation:
         segments = Ain['segments']
         triangles = Ain['triangles']
 
+        self.uniquePointIDs = self.uniqueIDManager.addPoints(exactVerts)
+
         self.triangles = np.array(triangles,dtype=int)
         self.segments = np.array(segments,dtype=int)
         self.triangleMap = None
         self.exactVerts = np.array(exactVerts, dtype=Point)
         self.numericVerts = np.array(numericVerts)
         self.isValidVertex = np.array([True for _ in self.numericVerts], dtype=bool)
+
+        #log on all exact vertices and triangles
 
         self.inputPointTree = KDTree(numericVerts)
 
@@ -158,14 +245,126 @@ class Triangulation:
                         self.segmentType[edgeId] = True
         self.segmentType = np.array(self.segmentType)
 
+        self.uniqueTriangleIDs = self.uniqueIDManager.addKeyObjectPairList([self.triangleKey(i) for i in self.validTriIdxs()],[self.triangleState(i) for i in self.validTriIdxs()])
+        self.reverseMap = dict()
+        for i in self.validTriIdxs():
+            self.reverseMap[self.uniqueTriangleIDs[i]] = i
+
+        self.watch = 0
+
+        #add steinerpoints
+
+        if steinerpoints is not None:
+            action = TriangulationAction(steinerpoints,[-1 for _ in steinerpoints],[],[],False,False)
+            trueAction = self.applyUnsafeActionAndReturnSafeAction(action)
+            assert(len(trueAction.addedPoints) == len(steinerpoints))
+
+
+        #vertex spawners
+        self.steinerGpKeys = set()
+
+        #vertex pair spawners
+
+        #circle arrangement stuff
+
+        self.generatingCircleSet = set()
+        # stores the set of circles that generate the current circle arrangement
+
+        self.hitCircles = dict()
+        # hitCircles maps (uniqueTriIDA,uniqueTriIDB,m) first to the m th intersection point p of the circumcircles of the
+        # triangles corresponding to uniqueTriIDA uniqueTriIDB, and then to the set (as a topological disk tuple) of
+        # uniqueIDs whose circumcircle contains p.
+        # hitCircles.keys() corresponds precisely to the set of points that sample the circle arrangement
+
+
+        self.triPairsInTree = set()
+        self.circleIntersectionTree = None
+        # circleIntersectionTree is the only non-combinatorial circle arrangement stuff related object that is NOT stored
+        # in the uniqueIDManager. circleIntersectionTree contains all points corresponding to the triples (uniqueTriIDA,uniqueTriIDB,m)
+        # together with their key (uniqueTriIDA,uniqueTriIDB,m). triPairsInTree stores all (uniqueTriIDA,uniqueTriIDB)-pairs
+        # that are present in the tree
+
+        self.circleVectorCount = dict()
+        # for every distinct set (as a sorted tuple) of circle memberships count how often it is in the image of hitCircles
+        # circleVectorCount.keys() then contains every unique set of circle memberships. It further stores the number of
+        # bad triangles present in its key.
+
         #self.geometricProblems = []
         self.geometricFaceProblems = []
         self.geometricLinkProblems = []
         self.geometricCircleProblems = []
         self.geometricSegmentProblems = []
-        self.updateGeometricProblems()
-        self.watch = 0
+        if withGeometricUpdate:
+            self.updateGeometricProblems()
+            self.circlesUpdatedAfterModification = True
 
+    ####
+    # unique ID handling stuff for geometric problem restoration
+    ####
+
+    def triangulationKey(self):
+        return tuple([-2]+sorted([self.uniquePointIDs[id] for id in self.validVertIdxs()]))
+
+    def triangleKey(self,triIdx):
+        return tuple(sorted(self.uniquePointIDs[id] for id in self.triangles[triIdx]))
+
+    def exactClipKey(self,triIdx):
+        return (self.uniqueTriangleIDs[triIdx],)
+
+    def unsafeGetExactClippingSegmentsByKey(self,key):
+        return self.uniqueIDManager.getByKey(key)
+
+    #for every triangle lazily returns the exact segments that clip the circle
+    def getExactClippingSegments(self,triIdx):
+        exactClippingKey = self.exactClipKey(triIdx)
+        if self.uniqueIDManager.hasKey(exactClippingKey):
+            return self.uniqueIDManager.getByKey(exactClippingKey)
+        segIds = self._getClippingSegments(triIdx)
+        segs = []
+        sides = []
+        for segId in segIds:
+            seg = Segment(self.point(self.segments[segId, 0]), self.point(self.segments[segId, 1]))
+            segs.append(seg)
+            for i in range(3):
+                if (side := eg.onWhichSide(seg, self.point(self.triangles[triIdx, i]))) != eg.COLINEAR:
+                    sides.append(side)
+                    break
+        self.uniqueIDManager.addKeyObjectPair(exactClippingKey,(segs,sides))
+        return (segs,sides)
+
+    def intersectionPairKey(self,triAIdx,triBIdx):
+        uniqueA = self.uniqueTriangleIDs[triAIdx]
+        uniqueB = self.uniqueTriangleIDs[triBIdx]
+        return tuple(sorted([uniqueA,uniqueB]))
+
+    def unsafeIntersectionsOfCircumcirclesByKey(self,pairKey):
+        return self.uniqueIDManager.getByKey(pairKey)
+
+    def intersectionsOfCircumcircles(self,triAIdx,triBIdx):
+        pairKey = self.intersectionPairKey(triAIdx,triBIdx)
+        if self.uniqueIDManager.hasKey(pairKey):
+            return self.uniqueIDManager.getByKey(pairKey)
+
+        intersections = eg.getCircleIntersections(self.circumcenter(triAIdx), self.circumRadiiSqr[triAIdx], self.circumcenter(triBIdx),
+                                                  self.circumRadiiSqr[triBIdx])
+
+        self.uniqueIDManager.addKeyObjectPair(pairKey,intersections)
+        return intersections
+
+    def topoDiskKey(self,disk):
+        #-1 essentially acts as a keyword for "topological disk"
+        return tuple(sorted([-1]+[self.uniqueTriangleIDs[id] for id in disk]))
+
+    def lazyConstructGeometricSubpoblemFromTopoDisk(self,diskkey):
+        if self.uniqueIDManager.hasKey(diskkey):
+            return self.uniqueIDManager.getByKey(diskkey)
+        #TODO:
+        disk = []
+        for key in diskkey[1:]:
+            assert(self.uniqueTriangleIDs[self.reverseMap[key]] == key)
+            disk.append(self.reverseMap[key])
+        self.uniqueIDManager.addKeyObjectPair(diskkey,self.getGeometricSubproblemFromTopoDisk(disk))
+        return self.uniqueIDManager.getByKey(diskkey)
     ####
     # visualization and parsing
     ####
@@ -525,12 +724,15 @@ class Triangulation:
         self.segmentType = np.hstack((self.segmentType, self.segmentType[segIdx]))
 
     def createPoint(self, p: Point, preferedId = None):
+        self.circlesUpdatedAfterModification = False
+        self.linksUpdatedAfterModification = False
         invalids = self.invalidVertIdxs()
         if len(invalids) == 0:
             if preferedId != None:
                 assert(False)
             self.exactVerts = np.vstack((self.exactVerts, [p]))
             self.numericVerts = np.vstack((self.numericVerts, [float(p.x()), float(p.y())]))
+            self.uniquePointIDs.append(self.uniqueIDManager.safeAddPoint(p))
             self.vertexMap.append([])
             self.pointTopologyChanged = np.hstack((self.pointTopologyChanged, True))
             self.isValidVertex = np.hstack((self.isValidVertex, True))
@@ -550,6 +752,7 @@ class Triangulation:
                     assert(False)
             self.exactVerts[myIdx] = p
             self.numericVerts[myIdx] = [float(p.x()), float(p.y())]
+            self.uniquePointIDs[myIdx] = self.uniqueIDManager.safeAddPoint(p)
             self.pointTopologyChanged[myIdx] = True
             self.setValidVert(myIdx)
 
@@ -583,6 +786,7 @@ class Triangulation:
                 self.badTris = np.hstack((self.badTris, [False]))
                 self.circumCenters = np.vstack((self.circumCenters, [Point(FieldNumber(0), FieldNumber(0))]))
                 self.circumRadiiSqr = np.hstack((self.circumRadiiSqr, [FieldNumber(0)]))
+                self.uniqueTriangleIDs.append(-1)
 
                 myIdxs.append(len(self.triangles) - 1)
             else:
@@ -602,6 +806,8 @@ class Triangulation:
             self.setVertexMap(myIdx)
             self.setCircumCenter(myIdx)
             self.setBadness(myIdx)
+            self.uniqueTriangleIDs[myIdx] = self.uniqueIDManager.safeAddKeyObjectPair(self.triangleKey(myIdx), self.triangleState(myIdx))
+            self.reverseMap[self.uniqueTriangleIDs[myIdx]] = myIdx
 
             for iVIdx in range(3):
                 neighbour, oppIVIdx, constraint = self.triangleMap[myIdx, iVIdx]
@@ -609,7 +815,15 @@ class Triangulation:
                     self.triangleMap[neighbour, oppIVIdx, :2] = [myIdx, iVIdx]
         return myIdxs
 
-    def copyOfCombinatorialState(self):
+    def copyOfCombinatorialState(self,rootKey=None):
+
+        #assert that trianglestates are correct
+        for i in self.validTriIdxs():
+            if not (self.uniqueIDManager.hasKey(self.triangleKey(i))):
+                assert(False)
+            if self.uniqueIDManager.getByKey(self.triangleKey(i)) != self.triangleState(i):
+                assert(False)
+
         state = dict()
         state["triangles"] = np.copy(self.triangles)
         state["triangleMap"] = np.copy(self.triangleMap)
@@ -626,9 +840,27 @@ class Triangulation:
         state["isValidVertex"] = np.copy(self.isValidVertex)
         state["segmentType"] = np.copy(self.segmentType)
         state["pointTopologyChanged"] = np.copy(self.pointTopologyChanged)
+        state["uniqueTriangleIDs"] = copy.deepcopy(self.uniqueTriangleIDs)
+        state["reverseMap"] = copy.deepcopy(self.reverseMap)
+        state["uniquePointIDs"] = copy.deepcopy(self.uniquePointIDs)
+
+        state["rootKey"] = rootKey
+
+        if rootKey is None:
+
+            state["generatingCircleSet"] = copy.deepcopy(self.generatingCircleSet)
+            state["hitCircles"] = copy.deepcopy(self.hitCircles)
+            state["triPairsInTree"] = copy.deepcopy(self.triPairsInTree)
+            state["circleIntersectionTree"] = copy.deepcopy(self.circleIntersectionTree)
+            state["circleVectorCount"] = copy.deepcopy(self.circleVectorCount)
+            state["steinerGpKeys"] = copy.deepcopy(self.steinerGpKeys)
+            state["updatedAfterModification"] = copy.deepcopy(self.circlesUpdatedAfterModification)
+            state["linksUpdatedAfterModification"] = copy.deepcopy(self.linksUpdatedAfterModification)
+
         return state
 
     def applyCombinatorialState(self,state):
+
         self.triangles = np.copy(state["triangles"])
         self.triangleMap = np.copy(state["triangleMap"])
         self.edgeTopologyChanged = np.copy(state["edgeTopologyChanged"])
@@ -644,15 +876,42 @@ class Triangulation:
         self.isValidVertex = np.copy(state["isValidVertex"])
         self.segmentType = np.copy(state["segmentType"])
         self.pointTopologyChanged = np.copy(state["pointTopologyChanged"])
+        self.uniqueTriangleIDs = copy.deepcopy(state["uniqueTriangleIDs"])
+        self.uniquePointIDs = copy.deepcopy(state["uniquePointIDs"])
+        self.exactVerts = np.array([self.uniqueIDManager.getById(id) for id in self.uniquePointIDs])
+        self.numericVerts = np.array([[float(p[0]),float(p[1])] for p in self.exactVerts])
+        self.reverseMap = copy.deepcopy(state["reverseMap"])
+
+        if state["rootKey"] is None:
+
+            #following things are only relevent if we updated the stuff
+            self.generatingCircleSet = copy.deepcopy(state["generatingCircleSet"])
+            self.hitCircles = copy.deepcopy(state["hitCircles"])
+            self.triPairsInTree = copy.deepcopy(state["triPairsInTree"])
+            self.circleVectorCount = copy.deepcopy(state["circleVectorCount"])
+            self.circleIntersectionTree = copy.deepcopy(state["circleIntersectionTree"])
+            self.steinerGpKeys = copy.deepcopy(state["steinerGpKeys"])
+
+            self.circlesUpdatedAfterModification = copy.deepcopy(state["updatedAfterModification"])
+            self.linksUpdatedAfterModification = copy.deepcopy(state["linksUpdatedAfterModification"])
+
+        else:
+            self.generatingCircleSet = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["generatingCircleSet"])
+            self.hitCircles = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["hitCircles"])
+            self.triPairsInTree = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["triPairsInTree"])
+            self.circleVectorCount = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["circleVectorCount"])
+            self.circleIntersectionTree = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["circleIntersectionTree"])
+            self.steinerGpKeys = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["steinerGpKeys"])
+            self.circlesUpdatedAfterModification = False
+            self.linksUpdatedAfterModification = False
 
 
-        # need to repopulate empty rows to stay consistent. maybe in future change combinatorial state as well...
-        #hopefuly we only need to update vertex based rows...
-        for idx in range(len(self.vertexMap),len(self.exactVerts)):
-            #create the combinatorial side of an invalid vertex
-            self.vertexMap.append([])
-            self.pointTopologyChanged = np.hstack((self.pointTopologyChanged, False))
-            self.isValidVertex = np.hstack((self.isValidVertex, False))
+        #assert that trianglestates are correct
+        for i in self.validTriIdxs():
+            if not (self.uniqueIDManager.hasKey(self.triangleKey(i))):
+                assert(False)
+            if self.uniqueIDManager.getByKey(self.triangleKey(i)) != self.triangleState(i):
+                assert(False)
 
     def setInvalidTriangle(self, triIdx, tri, triMap):
         self.triangles[triIdx] = tri
@@ -670,7 +929,11 @@ class Triangulation:
         self.setBadness(triIdx)
         self.setValidTri(triIdx)
 
+        self.uniqueTriangleIDs[triIdx] = self.uniqueIDManager.safeAddKeyObjectPair(self.triangleKey(triIdx),self.triangleState(triIdx))
+        self.reverseMap[self.uniqueTriangleIDs[triIdx]] = triIdx
+
     def unlinkTriangle(self, triIdx):
+        self.reverseMap.pop(self.uniqueTriangleIDs[triIdx])
         self.unsetBadness(triIdx)
         self.unsetValidTri(triIdx)
 
@@ -701,7 +964,7 @@ class Triangulation:
         for gpiIdx in reversed(range(len(self.geometricSegmentProblems))):
             hasToBeRemoved = False
             for triIdx in self.geometricSegmentProblems[gpiIdx].triIdxs:
-                if self.triangleChanged[triIdx]:
+                if triIdx >= len(self.triangles) or self.triangleChanged[triIdx]:
                     hasToBeRemoved = True
                     break
             if hasToBeRemoved:
@@ -748,12 +1011,78 @@ class Triangulation:
 
         #self.rebaseTriangleState()
 
+    def _updateGeometricLinkProblems(self):
+        if self.linksUpdatedAfterModification:
+            return
+        #probably no need to recompute all, but whatever
+        self.steinerGpKeys.clear()
+
+        new = 0
+
+        for idx in self.validVertIdxs():
+            hasBad = False
+            if idx < self.instanceSize:
+                continue
+            localIdInside = set()
+            localIdOutside = set()
+            for triIdx,internal in self.vertexMap[idx]:
+                localIdInside.add(triIdx)
+                hasBad = hasBad or self.badTris[triIdx]
+                if self.triangleMap[triIdx,internal,0] != outerFace:
+                    localIdOutside.add(self.triangleMap[triIdx,internal,0])
+
+            if not hasBad:
+                continue
+
+            gpKey = self.topoBoundaryKey(tuple(sorted([self.uniqueTriangleIDs[idx] for idx in localIdInside])),tuple(sorted([self.uniqueTriangleIDs[idx] for idx in localIdOutside])))
+            if self.uniqueIDManager.hasKey(gpKey):
+                continue
+            self.uniqueIDManager.safeAddKeyObjectPair(gpKey,self.getEnclosementOfLink([idx],True))
+            self.steinerGpKeys.add(gpKey)
+            new += 1
+
+
+        newDouble = 0
+
+        for triIdx in self.validTriIdxs():
+            for internal in range(3):
+                if self.triangleMap[triIdx,internal,0] < triIdx:
+                    continue
+                myIds = [self.triangles[triIdx,(internal+1)%3],self.triangles[triIdx,(internal+2)%3]]
+                if myIds[0] < self.instanceSize or myIds[1] < self.instanceSize:
+                    continue
+
+                localIdInside = set()
+                localIdOutside = set()
+                hasBad = False
+                for idx in myIds:
+
+                    for subtriIdx, subinternal in self.vertexMap[idx]:
+                        localIdInside.add(subtriIdx)
+                        hasBad = hasBad or self.badTris[subtriIdx]
+                        if self.triangleMap[subtriIdx, subinternal, 0] != outerFace:
+                            localIdOutside.add(self.triangleMap[subtriIdx, subinternal, 0])
+
+                if not hasBad:
+                    continue
+
+                gpKey = self.topoBoundaryKey(tuple(sorted([self.uniqueTriangleIDs[idx] for idx in localIdInside])),
+                                             tuple(sorted([self.uniqueTriangleIDs[idx] for idx in localIdOutside])))
+                if self.uniqueIDManager.hasKey(gpKey):
+                    continue
+                self.uniqueIDManager.safeAddKeyObjectPair(gpKey, self.getEnclosementOfLink(myIds, True))
+                self.steinerGpKeys.add(gpKey)
+                newDouble += 1
+        self.linksUpdatedAfterModification = True
+        logging.info(f"added {new} many single replacers, and {newDouble} many double replacers")
+
+
     def updateGeometricLinkProblems(self):
         # remove all geometric problems, whose face set has experienced a change
         for gpiIdx in reversed(range(len(self.geometricLinkProblems))):
             hasToBeRemoved = False
             for triIdx in self.geometricLinkProblems[gpiIdx].triIdxs:
-                if self.triangleChanged[triIdx]:
+                if triIdx >= len(self.triangles) or self.triangleChanged[triIdx]:
                     hasToBeRemoved = True
                     break
             if hasToBeRemoved:
@@ -778,49 +1107,380 @@ class Triangulation:
                 self.edgeTopologyChanged[triIdx, i] = False
         #np.random.shuffle(self.geometricProblems)
 
+    def _getClippingSegments(self,triIdx):
+
+        myCC = self.circumcenter(triIdx)
+        myCR = self.circumRadiiSqr[triIdx]
+
+        touchedTris = {triIdx}
+        clippingSegments = []
+        digest = [triIdx]
+        while len(digest) > 0:
+            cur = digest.pop(0)
+            for i in range(3):
+                if self.triangleMap[cur,i,2] != noneEdge:
+                    if eg.segmentInnerIntersectsCircle(myCC,myCR,Segment(self.point(self.triangles[cur,(i+1)%3]),self.point(self.triangles[cur,(i+2)%3]))):
+                        clippingSegments.append(self.triangleMap[cur,i,2])
+                else:
+                    next = self.triangleMap[cur,i,0]
+                    if next == outerFace:
+                        continue
+                    if next in touchedTris:
+                        continue
+                    touchedTris.add(next)
+                    if eg.segmentInnerIntersectsCircle(myCC,myCR,Segment(self.point(self.triangles[cur,(i+1)%3]),self.point(self.triangles[cur,(i+2)%3]))):
+                        digest.append(next)
+        return clippingSegments
+
+    def getCCsIntersectingCC(self,triIdx):
+
+        myCC = self.circumcenter(triIdx)
+        myCR = self.circumRadiiSqr[triIdx]
+
+        touchedTris = {triIdx}
+        intersectingTriangles = []
+        digest = [triIdx]
+        while len(digest) > 0:
+            cur = digest.pop(0)
+
+            for i in range(3):
+                if self.triangleMap[cur,i,2] != noneEdge:
+                    continue
+                else:
+                    if self.triangleMap[cur,i,0] == outerFace:
+                        continue
+                    next = self.triangleMap[cur,i,0]
+                    if next in touchedTris:
+                        continue
+                    touchedTris.add(next)
+                    otherCC = self.circumcenter(next)
+                    otherCR = self.circumRadiiSqr[next]
+                    if eg.circleIntersectsCircle(myCC,myCR,otherCC,otherCR):
+                        intersectingTriangles.append(next)
+                        digest.append(next)
+        return intersectingTriangles
+
+    def _internalAddIDToHitCircles(self,key,id,isIDBad):
+        if key not in self.hitCircles.keys():
+            #for now be safe
+            assert(False)
+        oldTopoDisk = self.hitCircles[key]
+        newTopoDisk = tuple(sorted(list(oldTopoDisk) + [id]))
+        self.hitCircles[key] = newTopoDisk
+        oldCount,oldBadCount,gpKey = self.circleVectorCount.get(oldTopoDisk,(0,0,None))
+        if oldBadCount > 0:
+            if oldCount > 1:
+                self.circleVectorCount[oldTopoDisk] = (oldCount - 1, oldBadCount,gpKey)
+            elif oldCount == 1:
+                self.circleVectorCount.pop(oldTopoDisk)
+
+        if oldBadCount + (1 if isIDBad else 0) > 0:
+            newCount,newBadCount,gpKey = self.circleVectorCount.get(newTopoDisk,(0,oldBadCount + (1 if isIDBad else 0),None))
+            self.circleVectorCount[newTopoDisk] = (newCount + 1, newBadCount,gpKey)
+
+    def _internalRemoveIDFromHitCircles(self,key,id,isIDBad):
+        if key not in self.hitCircles.keys():
+            assert(False)
+        oldTopoDisk = self.hitCircles[key]
+        assert(id in oldTopoDisk)
+        newTopoDisk = tuple(sorted([x for x in oldTopoDisk if x != id]))
+        self.hitCircles[key] = newTopoDisk
+        oldCount,oldBadCount,gpKey = self.circleVectorCount.get(oldTopoDisk,(0,0,None))
+        if oldBadCount > 0:
+            if oldCount > 1:
+                self.circleVectorCount[oldTopoDisk] = (oldCount - 1, oldBadCount,gpKey)
+            elif oldCount == 1:
+                self.circleVectorCount.pop(oldTopoDisk)
+
+        if oldBadCount - (1 if isIDBad else 0) > 0:
+            newCount,newBadCount,gpKey = self.circleVectorCount.get(newTopoDisk,(0,oldBadCount - (1 if isIDBad else 0),None))
+            self.circleVectorCount[newTopoDisk] = (newCount + 1, newBadCount,gpKey)
+
+    def _internalDeleteKeyFromHitCircles(self,key):
+        if key not in self.hitCircles.keys():
+            assert(False)
+        oldTopoDisk = self.hitCircles[key]
+        oldCount,oldBadCount,gpKey = self.circleVectorCount.get(oldTopoDisk,(0,0,None))
+        if oldBadCount > 0:
+            if oldCount > 1:
+                self.circleVectorCount[oldTopoDisk] = (oldCount - 1, oldBadCount,gpKey)
+            elif oldCount == 1:
+                self.circleVectorCount.pop(oldTopoDisk)
+        self.hitCircles.pop(key)
+
+    def unsafeGetTriangleInfo(self,uniqueTriangleId):
+        return self.uniqueIDManager.getById(uniqueTriangleId)
+
+    def triangleState(self,triIdx):
+        if not (self.isValidTriangle[triIdx]):
+            assert(False)
+        return (self.isBad(triIdx),self.circumcenter(triIdx),FieldNumber(self.circumRadiiSqr[triIdx].exact()))
+
+    def computeBoundaryInGlobalTerms(self,localIds):
+        out = set()
+        for id in localIds:
+            for internal in range(3):
+                nn = self.triangleMap[id,internal,0]
+                if nn == outerFace or nn in localIds:
+                    continue
+                out.add(self.uniqueTriangleIDs[nn])
+        return out
+
+    def topoBoundaryKey(self,topoDisk,boundary):
+        return (-3,topoDisk,boundary)
+
+    #essentially update generatingCircleSet to generatingCircleSet \ removeSet u addSet
+    def _internalGeometricCircleProblems(self,removeSet,addSet):
+
+        #variable guide:
+
+        #self.generatingCircleSet = set()
+        # stores the set of circles that generate the current circle arrangement
+
+        #self.hitCircles = dict()
+        # hitCircles maps (uniqueTriIDA,uniqueTriIDB,m) first to the m th intersection point p of the circumcircles of the
+        # triangles corresponding to uniqueTriIDA uniqueTriIDB, and then to the set (as a topological disk tuple) of
+        # uniqueIDs whose circumcircle contains p.
+        # hitCircles.keys() corresponds precisely to the set of points that sample the circle arrangement
+
+
+        #self.triPairsInTree = set()
+        #self.circleIntersectionTree = None
+        # circleIntersectionTree is the only non-combinatorial circle arrangement stuff related object that is NOT stored
+        # in the uniqueIDManager. circleIntersectionTree contains all points corresponding to the triples (uniqueTriIDA,uniqueTriIDB,m)
+        # together with their key (uniqueTriIDA,uniqueTriIDB,m). triPairsInTree stores all (uniqueTriIDA,uniqueTriIDB)-pairs
+        # that are present in the tree
+
+        #self.circleVectorCount = dict()
+        # for every distinct set (as a sorted tuple) of circle memberships count how often it is in the image of hitCircles
+        # circleVectorCount.keys() then contains every unique set of circle memberships. It further stores the number of
+        # bad triangles present in its key.
+
+        start = time.time()
+
+        #spuruous checks to make sure, that afterwards all circle ids consist of ids in my local triangulation
+        for id in self.generatingCircleSet:
+            if id in removeSet:
+                continue
+            else:
+                assert(id in self.uniqueTriangleIDs)
+        for _,id in addSet:
+            assert(id in self.uniqueTriangleIDs)
+
+        # phase 1:
+        # remove all mentions of elements in removeSet: as generators of intersectionpoints, their points from the tree, and from all arrangementvectors
+
+        for id in removeSet:
+            segs,sides = self.unsafeGetExactClippingSegmentsByKey((id,))
+            isBad,cc,cr = self.unsafeGetTriangleInfo(id)
+            keys = self.circleIntersectionTree.query(cc,cr,self.uniqueIDManager,segs,sides)
+            for key in keys:
+                #this stops unexpected consistencies for circles that may intersect but that are not in each others intersection neighbourhood due to
+                #constrained delauney tomfoolery. A normal delauney triangulation would not have this problem...
+                if id in self.hitCircles.get(tuple(key),[]):
+                    self._internalRemoveIDFromHitCircles(tuple(key),id,isBad)
+
+        #for key in self.hitCircles.keys():
+        #    if not self.circleIntersectionTree.searchKey(key):
+        #        logging.info(f"failed check for {key}")
+
+        flatPairRemover = [pair for pair in self.triPairsInTree if pair[0] in removeSet or pair[1] in removeSet]
+
+        treeRemoveKeys = []
+        treeAddKeys = []
+
+        for pair in flatPairRemover:
+            self.triPairsInTree.remove(pair)
+            intersections = self.unsafeIntersectionsOfCircumcirclesByKey(pair)
+            #for p in intersections:
+            #    self.circleIntersectionTree.removePoint(p,self.uniqueIDManager)
+            for id in range(len(intersections)):
+
+                tuplekey = tuple([pair[0], pair[1], id])
+                treeRemoveKeys.append(tuplekey)
+
+                if tuplekey in self.hitCircles.keys():
+                    self._internalDeleteKeyFromHitCircles(tuplekey)
+
+                else:
+                    #this means it was not hit by any circle and thus never got a vector assigned to it
+                    pass
+
+        #TODO: case distinction if add set is huge?
+        possibleNewIntersections = set()
+        participatingCircles = set()
+
+        intersectingCCsDict = dict()
+
+        for localId,globalId in addSet:
+
+            # compute intersecting stuff
+            intersectingCCsDict[localId] = self.getCCsIntersectingCC(localId)
+
+            # update, which circles are intersected by badTri and thus are vouched for by badTri
+            participatingCircles.add((localId,globalId))
+
+            for aIdx in intersectingCCsDict[localId]:
+                participatingCircles.add((aIdx,self.uniqueTriangleIDs[aIdx]))
+
+            # update which circle pairs which both intersect badTri intersect themselves, and have badTri vouch for it
+
+            for aIdx in intersectingCCsDict[localId]:
+                key = tuple(sorted([aIdx, localId]))
+                possibleNewIntersections.add(key)
+                for bIdx in intersectingCCsDict[localId]:
+                    key = tuple(sorted([aIdx, bIdx]))
+                    possibleNewIntersections.add(key)
+
+        for i, j in possibleNewIntersections:
+            pairedKey = tuple(sorted([self.uniqueTriangleIDs[i],self.uniqueTriangleIDs[j]]))
+            if pairedKey not in self.triPairsInTree:
+                intersections = self.intersectionsOfCircumcircles(i, j)
+                if len(intersections) == 0:
+                    continue
+                self.triPairsInTree.add(pairedKey)
+
+                for pidx in range(len(intersections)):
+                    treeAddKeys.append((pairedKey[0],pairedKey[1], pidx))
+
+        #update Tree
+        if self.circleIntersectionTree == None:
+            self.circleIntersectionTree = combinatorialKDTree(np.array(treeAddKeys),self.uniqueIDManager)#MyBadKDTree(np.array(points),np.array(keys))
+        else:
+            self.circleIntersectionTree.batchUpdate(treeAddKeys,treeRemoveKeys,self.uniqueIDManager)
+
+        diffTree = combinatorialKDTree(np.array(treeAddKeys),self.uniqueIDManager)#MyBadKDTree(np.array(points),np.array(keys))
+
+        localIds = set(x for x,_ in addSet)
+        for id,globalId in participatingCircles:
+            segs,sides = self.getExactClippingSegments(id)
+            keys = None
+            if id in localIds:
+                keys = self.circleIntersectionTree.query(self.circumcenter(id),self.circumRadiiSqr[id],self.uniqueIDManager,segs,sides)
+            else:
+                keys = diffTree.query(self.circumcenter(id),self.circumRadiiSqr[id],self.uniqueIDManager,segs,sides)
+            for key in keys:
+                realKey = tuple(key)
+                if realKey not in self.hitCircles.keys():
+                    self.hitCircles[realKey] = tuple([-1])
+                self._internalAddIDToHitCircles(realKey,globalId,self.badTris[id])
+
+        if False:
+            for key in self.hitCircles.keys():
+                topoDisk = self.hitCircles[key]
+                for id in topoDisk:
+                    if id == -1:
+                        continue
+                    if id not in self.uniqueTriangleIDs:
+                        segs, sides = self.unsafeGetExactClippingSegmentsByKey((id,))
+                        isBad, cc, cr = self.unsafeGetTriangleInfo(id)
+                        logging.error(f"check failed at {key} with {id} in {topoDisk}...")
+                        keys = self.circleIntersectionTree.query(cc, cr,self.uniqueIDManager, segs, sides,validateTuple=key)
+                        logging.error(f"keys: {keys}")
+                        pass
+
+        newUnsolved = 0
+        newAll = 0
+        for topoDisk in self.circleVectorCount.keys():
+            localIdTopoDisk = tuple([self.reverseMap[id] for id in topoDisk if id != -1])
+            globalIdsBoundary = tuple(sorted(list(self.computeBoundaryInGlobalTerms(localIdTopoDisk))))
+            gpKey = self.topoBoundaryKey(topoDisk,globalIdsBoundary)
+            withBad,count,_ = self.circleVectorCount[topoDisk]
+            self.circleVectorCount[topoDisk] = (withBad,count,gpKey)
+            if self.uniqueIDManager.hasKey(gpKey):
+                continue
+            else:
+                #assert(self.uniqueTriangleIDs[self.reverseMap[id]] == id)
+                self.uniqueIDManager.safeAddKeyObjectPair(gpKey,self.getGeometricSubproblemFromTopoDisk(localIdTopoDisk))
+                newUnsolved += 1 if self.uniqueIDManager.getByKey(gpKey) is not None else 0
+                newAll += 1
+        for r in removeSet:
+            self.generatingCircleSet.remove(r)
+        for _,a in participatingCircles:
+            self.generatingCircleSet.add(a)
+
+        logging.info(f"added {newUnsolved}({newAll}) many new geometric subproblems. Total cleaned geometric subproblems: {len([self.uniqueIDManager.getByKey(self.circleVectorCount[key][2]) for key in self.circleVectorCount.keys() if self.uniqueIDManager.getByKey(self.circleVectorCount[key][2]) is not None])} in time {time.time() - start}")
+
+    def _updateGeometricCircleProblems(self):
+        removeSet = set()
+        newSet = set([self.uniqueTriangleIDs[id] for id in self.validTriIdxs()])
+        for id in self.generatingCircleSet:
+            if id not in newSet:
+                removeSet.add(id)
+
+        addSet = set()
+        for id in self.validTriIdxs():
+            if not self.badTris[id]:
+                continue
+            if self.uniqueTriangleIDs[id] not in self.generatingCircleSet:
+                addSet.add((id,self.uniqueTriangleIDs[id]))
+        self._internalGeometricCircleProblems(removeSet,addSet)
+
+    def _generateGeometricCircleProblems(self):
+        self._internalGeometricCircleProblems(set(),set([(id,self.uniqueTriangleIDs[id]) for id in self.validTriIdxs()]))
+
     def updateGeometricCircleProblems(self):
-        # remove all geometric problems, whose face set has experienced a change
-        for gpiIdx in reversed(range(len(self.geometricCircleProblems))):
-            hasToBeRemoved = False
-            for triIdx in self.geometricCircleProblems[gpiIdx].triIdxs:
-                if self.triangleChanged[triIdx]:
-                    hasToBeRemoved = True
-                    break
-            if hasToBeRemoved:
-                self.geometricCircleProblems.pop(gpiIdx)
 
-        topoDisks = set()
-        for gp in self.geometricCircleProblems:
-            topoDisks.add(tuple(list(sorted(gp.triIdxs))))
-
-        # add all changed bad triangles
-        # add all changed bad triangles
-        #nonSuperseeded = self.getNonSuperseededBadTris()
-        for triIdx in np.where(self.triangleChanged)[0]:
-            if self.isValidTriangle[triIdx] and self.badTris[triIdx]:# and triIdx in nonSuperseeded:
-                triTopoDisks = self.getAllTriangleDisks(triIdx)
-                for disk in triTopoDisks:
-                    if disk not in topoDisks:
-                        gp = self.getGeometricSubproblemFromTopoDisk(disk)
-                        if gp is not None:
-                            self.geometricCircleProblems.append(gp)
-                        topoDisks.add(disk)
-            #logging.info("Number of topological disk problems: " + str(len(topoDisks)))
+        if self.circlesUpdatedAfterModification:
+            logging.info("circle update skipped, because already up to date")
+            return
+        if len(self.hitCircles) == 0:
+            self._generateGeometricCircleProblems()
+        else:
+            self._updateGeometricCircleProblems()
 
         self.rebaseTriangleState()
+        self.circlesUpdatedAfterModification = True
+        #DANGEROUS OPERATION:
+        if self.uniqueIDManager.hasKey(self.triangulationKey()):
+            if(self.uniqueIDManager.getByKey(self.triangulationKey())["rootKey"] is not None):
+                #print("updating half-state")
+                self.uniqueIDManager.halfstateCounter -= 1
+            elif(self.uniqueIDManager.getByKey(self.triangulationKey())["updatedAfterModification"] == False):
+                #print("updated nonupdated state")
+                pass
+            else:
+                assert(False)
+            self.uniqueIDManager.overwriteValueOfKey(self.triangulationKey(),self.copyOfCombinatorialState())
 
+    def verifyReverseMap(self):
+        for globalId in self.reverseMap.keys():
+            localId = self.reverseMap[globalId]
+            if localId >= len(self.triangles):
+                assert(False)
+            if self.isValidTriangle[localId] == False:
+                assert(False)
+            if self.uniqueTriangleIDs[localId] != globalId:
+                assert(False)
+        for id in self.validTriIdxs():
+            globalId = self.uniqueTriangleIDs[id]
+            if globalId not in self.reverseMap.keys():
+                assert(False)
 
     def updateGeometricProblems(self,fastAndGreedy=False):
-        self.updateGeometricFaceProblems()
+        #verify reverseMap
+        #self.verifyReverseMap()
+        #self.updateGeometricFaceProblems()
         #self.updateGeometricSegmentProblems()
-        self.updateGeometricLinkProblems()
+        #self.updateGeometricLinkProblems()
+        self._updateGeometricLinkProblems()
         if not fastAndGreedy:
             self.updateGeometricCircleProblems()
 
+    def geometricSubproblemKeyIterator(self):
+        return itertools.chain(
+            [self.circleVectorCount[key][2] for key in self.circleVectorCount.keys() if
+             self.uniqueIDManager.getByKey(self.circleVectorCount[key][2]) is not None],
+            [key for key in self.steinerGpKeys if self.uniqueIDManager.getByKey(key) is not None])  # ,self.geometricSegmentProblems,self.geometricFaceProblems,self.geometricLinkProblems)
+
     def geometricSubproblemIterator(self):
-        return itertools.chain(self.geometricCircleProblems,self.geometricSegmentProblems,self.geometricFaceProblems,self.geometricLinkProblems)
+        return itertools.chain([self.uniqueIDManager.getByKey(self.circleVectorCount[key][2]) for key in self.circleVectorCount.keys() if self.uniqueIDManager.getByKey(self.circleVectorCount[key][2]) is not None],
+                               [self.uniqueIDManager.getByKey(key) for key in self.steinerGpKeys if self.uniqueIDManager.getByKey(key) is not None])#,self.geometricSegmentProblems,self.geometricFaceProblems,self.geometricLinkProblems)
 
     def flipEdge(self, triIdx, iVIdx):
+
+        #self.verifyReverseMap()
+
         triA = self.triangles[triIdx]
         triAIdx = triIdx
         triAIVIdx = iVIdx
@@ -850,6 +1510,8 @@ class Triangulation:
 
         self.setInvalidTriangle(triAIdx, newA, newAMap)
         self.setInvalidTriangle(triBIdx, newB, newBMap)
+
+        #self.verifyReverseMap()
 
         # self.plotTriangulation()
 
@@ -882,13 +1544,13 @@ class Triangulation:
                 onlyOn = True
                 for v in range(3):
                     inCirc = eg.inCircle(cc, cr, self.point(self.triangles[j][v]))
-                    if inCirc == "inside":
+                    if inCirc == eg.INSIDE:
                         edge = [[i, jIdx], [j, oppositeIndexInJ]]
                         onlyOn = False
                         if not _isInHorribleEdgeStack(badEdgesInTriangleLand, edge):
                             # add to stack, but not to banned
                             badEdgesInTriangleLand.append(edge)
-                    if inCirc == "outside":
+                    if inCirc == eg.OUTSIDE:
                         onlyOn = False
                 if onlyOn:
                     newTriangleA = [self.triangles[i][jIdx], self.triangles[i][(jIdx + 1) % 3],
@@ -905,6 +1567,7 @@ class Triangulation:
                                                 self.triangles[edge[0][0]][(edge[0][1] + 2) % 3]])
 
         # self.validate()
+       # self.verifyReverseMap()
         # they are stored as [triangleindex, inducing index]
         badEdgesInTriangleLand = []
         bannedEdges = []
@@ -955,9 +1618,9 @@ class Triangulation:
         grazedTriIdxs = []
         for triIdx in self.validTriIdxs():
             hit,colinearIndex = self.pointHitsTriangle(triIdx, p)
-            if hit == "inside":
+            if hit == eg.INSIDE:
                 hitTriIdxs.append([triIdx])
-            elif hit == "on":
+            elif hit == eg.ON:
                 grazedTriIdxs.append([triIdx,colinearIndex])
         return hitTriIdxs,grazedTriIdxs
 
@@ -981,9 +1644,9 @@ class Triangulation:
                 touchedTris.add(nIdx)
 
             hit, colinearIndex = self.pointHitsTriangle(curTri, p)
-            if hit == "inside":
+            if hit == eg.INSIDE:
                 return [[curTri]],[]
-            elif hit == "on":
+            elif hit == eg.ON:
                 if colinearIndex is None:
                     return [],[]
                 if self.triangleMap[curTri,colinearIndex[0][0],0] == outerFace:
@@ -1031,6 +1694,8 @@ class Triangulation:
             self.validateCircumcenters()
             self.validateTriangleMap()
             self.validateVertexMap()
+
+            #self.verifyReverseMap()
 
             #for triIdx in self.validTriIdxs():
             #    for i in range(3):
@@ -1084,6 +1749,7 @@ class Triangulation:
             self.validateTriangleMap()
             self.validateVertexMap()
 
+            #self.verifyReverseMap()
             #self.ensureDelauney()
             # self.ensureDelauney(None)
 
@@ -1155,6 +1821,8 @@ class Triangulation:
             self.validateTriangleMap()
             self.validateVertexMap()
 
+            #self.verifyReverseMap()
+
             #self.ensureDelauney()
             # self.ensureDelauney(None)
 
@@ -1164,6 +1832,10 @@ class Triangulation:
         else:
             # vertex
             return False,None,[]
+
+    def canAddPoint(self,p:Point):
+        hitTriIdxs,grazedTriIdxs = self.informedGetHitTriIdxs(p)
+        return (len(hitTriIdxs) == 1 and len(grazedTriIdxs) == 0) or (len(hitTriIdxs) == 0 and 1 <= len(grazedTriIdxs) <= 2)
 
 
     def addPoint(self, p: Point, preferedId = None):
@@ -1175,6 +1847,7 @@ class Triangulation:
             return False
 
         hitTriIdxs,grazedTriIdxs = self.informedGetHitTriIdxs(p)
+        #self.verifyReverseMap()
         added,newIdx,touchedTriangles = self.insertPoint(p,hitTriIdxs, grazedTriIdxs, preferedId)
         self.ensureDelauney(touchedTriangles)
         self.watch += time.time() - start
@@ -1250,10 +1923,11 @@ class Triangulation:
         for triIdx, internal in sourceTris:
             self.unsetBadness(triIdx)
             self.unsetVertexMap(triIdx)
+            self.reverseMap.pop(self.uniqueTriangleIDs[triIdx])
             self.triangles[triIdx, internal] = target
             self.setVertexMap(triIdx)
             a, b, c = self.triangles[triIdx]
-            if eg.onWhichSide(Segment(self.point(a), self.point(b)), self.point(c)) == "colinear":
+            if eg.onWhichSide(Segment(self.point(a), self.point(b)), self.point(c)) == eg.COLINEAR:
                 isVeryBad.append(triIdx)
 
         for i in range(len(specialSourceTris)):
@@ -1290,10 +1964,10 @@ class Triangulation:
                                 self.flipEdge(zeroVolTri, j)
                                 a, b, c = self.triangles[zeroVolTri]
                                 assert (eg.onWhichSide(Segment(self.point(a), self.point(b)),
-                                                       self.point(c)) != "colinear")
+                                                       self.point(c)) != eg.COLINEAR)
                                 a, b, c = self.triangles[otherId]
                                 assert (eg.onWhichSide(Segment(self.point(a), self.point(b)),
-                                                       self.point(c)) != "colinear")
+                                                       self.point(c)) != eg.COLINEAR)
                                 isVeryBad.pop(i)
                                 broken = True
                                 break
@@ -1311,9 +1985,12 @@ class Triangulation:
             self.setBadness(triIdx)
             self.setCircumCenter(triIdx)
 
+            self.uniqueTriangleIDs[triIdx] = self.uniqueIDManager.safeAddKeyObjectPair(self.triangleKey(triIdx), self.triangleState(triIdx))
+            self.reverseMap[self.uniqueTriangleIDs[triIdx]] = triIdx
+
         for triIdx, _ in sourceTris:
             a, b, c = self.triangles[triIdx]
-            if eg.onWhichSide(Segment(self.point(a), self.point(b)), self.point(c)) == "colinear":
+            if eg.onWhichSide(Segment(self.point(a), self.point(b)), self.point(c)) == eg.COLINEAR:
                 print("oh no")
 
         return source, sharedTris
@@ -1465,7 +2142,7 @@ class Triangulation:
 
         return vIdxs,insideFaces,link,insideConstraints, boundaryConstraints
 
-    def getEnclosementOfLink(self,vIdxs):
+    def getEnclosementOfLink(self,vIdxs,withOutside = False):
         vIdxs,insideFaces,link, insideConstraints,boundaryConstraints = self.internalGetEnclosementOfLink(vIdxs)
         boundaryConstraintTypes = self.segmentType[boundaryConstraints]
         numBad = len(np.where(self.badTris[list(set(insideFaces))] == True)[0])
@@ -1491,11 +2168,24 @@ class Triangulation:
                     numBoundaryDroppers += 1
                     numBad -= 1
 
+        outsideIds = []
+        for face in insideFaces:
+            for internal in range(3):
+                if (nId := self.triangleMap[face,internal,0]) != outerFace and (nId not in insideFaces) and (nId not in outsideIds):
+                    if nId == noneFace:
+                        self.plotTriangulation()
+                        pass
+                    outsideIds.append(self.triangleMap[face,internal,0])
+
+        outside = []
+        for face in outsideIds:
+            outside.append([self.circumcenter(face),self.circumRadiiSqr[face]])
+
         if len(link) == len(list(set(link))):
             return GeometricSubproblem(vIdxs, insideFaces, link, self.exactVerts[list(vIdxs) + list(link)],
                                    self.numericVerts[list(vIdxs) + list(link)], self.segments[insideConstraints],
                                    self.segments[boundaryConstraints], boundaryConstraintTypes, self.instanceSize,
-                                   numBad,numBoundaryDroppers,None,"enclosement",None, self.gpaxs)
+                                   numBad,numBoundaryDroppers,outside if withOutside else None,"enclosement",None, self.gpaxs)
         else:
             logging.debug("Enclosement with seed "+str(vIdxs)+" produced non-trivial homotopytype...")
             return None
@@ -1540,7 +2230,7 @@ class Triangulation:
                         sideA = eg.onWhichSide(Segment(self.point(self.triangles[triIdx,triangleInternalRoot]),self.point(self.triangles[triIdx,(triangleInternalRoot+1)%3])),self.point(oppV))
                         sideB = eg.onWhichSide(Segment(self.point(self.triangles[triIdx,triangleInternalRoot]),self.point(self.triangles[triIdx,(triangleInternalRoot+2)%3])),self.point(oppV))
 
-                        if sideA == "colinear" or sideB == "colinear":
+                        if sideA == eg.COLINEAR or sideB == eg.COLINEAR:
                             continue
                         elif sideA != sideB:
                             #we can flip!
@@ -1587,7 +2277,8 @@ class Triangulation:
                     sides = []
                     for j in range(3):
                         sides.append(eg.onWhichSide(Segment(tri[j],tri[(j+1)%3]),qP))
-                    if "left" in sides and "right" in sides:
+                    if (eg.LEFT
+    in sides and eg.RIGHT in sides):
                         continue
                     else:
                         target = link[i]
@@ -2068,12 +2759,12 @@ class Triangulation:
                 if len(clip) == 1:
                     resultSegs.append(Segment(clip[0],clip[0]))
                     resultEdges.append(edge)
-                    resultRounders.append([rounder[0] if eg.inCircle(cc,cr,seg.source()) != "outside" else None,rounder[1] if eg.inCircle(cc,cr,seg.target()) != "outside" else None])
+                    resultRounders.append([rounder[0] if eg.inCircle(cc,cr,seg.source()) != eg.OUTSIDE else None,rounder[1] if eg.inCircle(cc,cr,seg.target()) != eg.OUTSIDE else None])
 
                 if len(clip) == 2:
                     resultSegs.append(Segment(*clip))
                     resultEdges.append(edge)
-                    resultRounders.append([rounder[0] if eg.inCircle(cc,cr,seg.source()) != "outside" else None,rounder[1] if eg.inCircle(cc,cr,seg.target()) != "outside" else None])
+                    resultRounders.append([rounder[0] if eg.inCircle(cc,cr,seg.source()) != eg.OUTSIDE else None,rounder[1] if eg.inCircle(cc,cr,seg.target()) != eg.OUTSIDE else None])
 
         return resultEdges,resultSegs,resultRounders
 
@@ -2125,6 +2816,10 @@ class Triangulation:
         orth = mid.scale(FieldNumber(2))
 
         if withPlot:
+            self.internalaxs.scatter([float(myCC[0])], [float(myCC[1])], marker='.', color='yellow', zorder=1000)
+            circle = plt.Circle((float(myCC[0]), float(myCC[1])), np.sqrt(float(self.circumRadiiSqr[triIdx])),
+                                color="yellow", fill=False, zorder=1000)
+            self.internalaxs.add_patch(circle)
             self.internalaxs.scatter([float(myCC[0])], [float(myCC[1])], marker='.', color='yellow', zorder=1000)
             circle = plt.Circle((float(myCC[0]), float(myCC[1])), np.sqrt(float(self.circumRadiiSqr[triIdx])),
                                 color="yellow", fill=False, zorder=1000)
@@ -2289,15 +2984,15 @@ class Triangulation:
         sides = np.array([eg.onWhichSide(Segment(self.point(self.triangles[triIdx, (i + 1) % 3]),
                                                  self.point(self.triangles[triIdx, (i + 2) % 3])), p) for i in
                           range(3)])
-        if np.all((sides == "left")) or np.all((sides == "right")):
-            return "inside",noneIntervalVertex
-        elif np.all((sides == "left") | (sides == "colinear")) or np.all(
-                (sides == "right") | (sides == "colinear")):
-            if len(np.where(sides == "colinear")[0])== 1:
-                return "on",np.argwhere(sides == "colinear")
+        if np.all((sides == eg.LEFT)) or np.all((sides == eg.RIGHT)):
+            return eg.INSIDE,noneIntervalVertex
+        elif np.all((sides == eg.LEFT) | (sides == eg.COLINEAR)) or np.all(
+                (sides == eg.RIGHT) | (sides == eg.COLINEAR)):
+            if len(np.where(sides == eg.COLINEAR)[0])== 1:
+                return eg.ON,np.argwhere(sides == eg.COLINEAR)
             else:
-                return "on",None
-        return "outside",noneIntervalVertex
+                return eg.ON,None
+        return eg.OUTSIDE,noneIntervalVertex
 
     def getAllTruncatedCirclesIntersecting(self,triIdx):
         #first figure out all triangles that intersect the circumcenter of triIdx
@@ -2385,7 +3080,7 @@ class Triangulation:
         for q in queryPoints:
             topoDisk = []
             for i in disks:
-                if eg.inCircle(self.circumcenter(i), self.circumRadiiSqr[i], q) != "outside":
+                if eg.inCircle(self.circumcenter(i), self.circumRadiiSqr[i], q) != eg.OUTSIDE:
                     intersectsEdge = False
                     for otherI in range(3):
                         for e, s in zip(limitingEdges, limitingSegments):
@@ -2428,11 +3123,11 @@ class Triangulation:
                     queryPoints.append(p)
         topoDisks = set()
         for q in queryPoints:
-            if eg.inCircle(myCC,myCRsqr,q) == "outside":
+            if eg.inCircle(myCC,myCRsqr,q) == eg.OUTSIDE:
                 continue
             topoDisk = []
             for i in intersecting:
-                if eg.inCircle(self.circumcenter(i),self.circumRadiiSqr[i],q) != "outside":
+                if eg.inCircle(self.circumcenter(i),self.circumRadiiSqr[i],q) != eg.OUTSIDE:
                     intersectsEdge = False
                     for otherI in range(3):
                         for e, s in zip(limitingEdges, limitingSegments):
@@ -2525,6 +3220,9 @@ class Triangulation:
         for face in topoDisk:
             for internal in range(3):
                 if (nId := self.triangleMap[face,internal,0]) != outerFace and (nId not in topoDisk) and (nId not in outsideIds):
+                    if nId == noneFace:
+                        self.plotTriangulation()
+                        pass
                     outsideIds.append(self.triangleMap[face,internal,0])
 
         outside = []
@@ -2612,21 +3310,33 @@ class Triangulation:
             assert (id == newId)
 
 class TriangulationAction:
-    def __init__(self,addedPoints,addedPointIds,removedPoints,removedPointIds,safe=True):
+    def __init__(self,addedPoints,addedPointIds,removedPoints,removedPointIds,safe=True,isTerminal=False):
         self.addedPoints = addedPoints
         self.addedPointIds = addedPointIds
         self.removedPoints = removedPoints
         self.removedPointIds = removedPointIds
         self.safe = safe
+        self.isTerminal = isTerminal
+
+def safeDiv(time,count):
+    if count == 0:
+        return 0
+    else:
+        return time/count
 
 class QualityImprover:
     def __init__(self, tri: Triangulation,seed=None):
         self.tri = tri
-        self.solver = StarSolver(2,1,1,1.25,2,2,2)
+        self.solver = StarSolver(2,1,1,1.25,2,2,1)
         if seed != None:
             np.random.seed(seed)
         self.seed = seed
         self.convergenceDetectorDict = dict()
+        #TODO: better hierachy... shouldnt be a member of triangulation, and quality imporver should probably just get an instnace?
+        self.uniqueIDManager = self.tri.uniqueIDManager
+        self.withChecks = True
+        self.goodHit = 0
+        self.badHit = 0
 
 
     def plotHistory(self,numSteinerHistory,numBadTriHistory,round,specialRounds,ax,twin_ax):
@@ -2653,23 +3363,62 @@ class QualityImprover:
             for r in specialRounds:
                 ax.plot([r,r],[b,t],color="blue")
 
-    def buildUnsafeActionList(self,earlyStoppingAllowed:int,onlyChanged=False,fastAndGreedy=False):
+    def buildSingleRemoveList(self):
+        r = []
+        for idx in self.tri.validVertIdxs():
+            if idx < self.tri.instanceSize:
+                continue
+            r.append((0,TriangulationAction([],[],[],[idx],False),None))
+        return r
+
+    def buildUnsafeActionList(self,earlyStoppingAllowed:int,onlyChanged=False,fastAndGreedy=False,mustModify=None):
         actionList = []
         hasGoodSolution = False
+
+        times = []
+        start = time.time()
 
         nonSuperseeded = self.tri.getNonSuperseededBadTris()
         if onlyChanged:
             nonSuperseeded = np.array([id for id in nonSuperseeded if self.tri.triangleChanged[id]])
 
         self.tri.updateGeometricProblems(fastAndGreedy)
+        times.append(time.time() - start)
+        start = time.time()
+
+        numSolves = 0
 
         #geometricsubproblem induced actions
-        np.random.shuffle(self.tri.geometricLinkProblems)
-        np.random.shuffle(self.tri.geometricCircleProblems)
-        np.random.shuffle(self.tri.geometricSegmentProblems)
-        for gp in self.tri.geometricSubproblemIterator():
+        #np.random.shuffle(self.tri.geometricLinkProblems)
+        #np.random.shuffle(self.tri.geometricCircleProblems)
+        #np.random.shuffle(self.tri.geometricSegmentProblems)
+        #[key for key in self.tri.geometricCircleProblemKeys if self.tri.topoDiskKey(key) == (-1,71,72,6535,6539)]
+        for gpKey in self.tri.geometricSubproblemKeyIterator():
+
+            if mustModify != None:
+                touches = False
+                for idx in gpKey[1]:
+                    if idx in mustModify:
+                        touches = True
+                        break
+                if not touches:
+                    for idx in gpKey[2]:
+                        if idx in mustModify:
+                            touches = True
+                            break
+                if not touches:
+                    continue
+
+            gp = self.uniqueIDManager.getByKey(gpKey)
+
+
             if onlyChanged and gp.wasSolved:
                 continue
+
+            if not gp.wasSolved:
+                numSolves += 1
+                if numSolves % 1000 == 0:
+                    logging.info(f"solved {numSolves} gps sofar in time {time.time() - start}")
             #TODO: return all different types of solutions instead of the best one, but respect rounding?
             #for eval, sol in self.solver.solve(gp):
             eval,sol = self.solver.solve(gp)
@@ -2679,12 +3428,14 @@ class QualityImprover:
                 if len(sol) == 0 and len(gp.getInsideSteiners()) == 0:
                     continue
                 actionList.append((eval,TriangulationAction(sol,[-1 for _ in sol],[],gp.getInsideSteiners(),False),gp))
-        if hasGoodSolution and earlyStoppingAllowed != -1 and len(actionList) > earlyStoppingAllowed :
+        times.append(time.time() - start)
+        if hasGoodSolution and earlyStoppingAllowed != -1 and len(actionList) > earlyStoppingAllowed:
+            logging.info(f"unsafe action list construction times: update took {times[0]}, solving {numSolves} gps took {times[1]}")
             return sorted(actionList,key=lambda x:x[0])
 
         #bad triangle induced actions
         #nonSuperseeded = self.tri.getNonSuperseededBadTris()  # list(np.where(self.tri.badTris == True)[0])
-
+        start = time.time()
         if len(nonSuperseeded) != 0:
             locs = None
 
@@ -2722,9 +3473,12 @@ class QualityImprover:
             else:
                 locs = nonSuperseeded
             np.random.shuffle(locs)
+            numPoints = 0
             for id in locs:
                 if earlyStoppingAllowed != -1 and len(actionList) > earlyStoppingAllowed :
+                    logging.info(f"unsafe action list construction times: update took {times[0]}, solving {numSolves} gps took {times[1]}, constructing {numPoints} points took {time.time() - start}")
                     return sorted(actionList,key=lambda x:x[0])
+                numPoints += 1
                 center = None
                 threat = self.convergenceDetectorDict.get(id, 0)
                 if threat < 10:
@@ -2747,8 +3501,31 @@ class QualityImprover:
                         center += self.tri.point(self.tri.triangles[id, i])
                     center = center.scale(FieldNumber(1) / FieldNumber(3))
 
+
+                if mustModify != None:
+                    modifies = False
+                    for uniqueTriIdx in mustModify:
+                        isInside = True
+                        segs,sides = self.tri.getExactClippingSegments(self.tri.reverseMap[uniqueTriIdx])
+                        bad,cc,cr = self.tri.uniqueIDManager.getById(uniqueTriIdx)
+                        if eg.inCircle(cc,cr,center) == eg.OUTSIDE:
+                            isInside = False
+                            continue
+                        for seg,side in zip(segs,sides):
+                            if eg.onWhichSide(seg,center) != eg.COLINEAR and eg.onWhichSide(seg,center) != side:
+                                isInside = False
+                                break
+                        if isInside:
+                            modifies = True
+                            break
+                    if not modifies:
+                        continue
+                    #else:
+                    #    print("yey")
+
                 actionList.append((self.solver.cleanWeight-1/64,TriangulationAction([center],[-1],[],[],False),None))
                 if earlyStoppingAllowed != -1 and len(actionList) > earlyStoppingAllowed:
+                    logging.info(f"unsafe action list construction times: update took {times[0]}, solving {numSolves} gps took {times[1]}, constructing {numPoints} points took {time.time() - start}")
                     break
         actionList = sorted(actionList,key=lambda x:x[0])
         return actionList
@@ -2757,146 +3534,219 @@ class QualityImprover:
         #numSteinerHistory.append(len(self.tri.validVertIdxs()) - self.tri.instanceSize)
         #numBadTriHistory.append(len(np.where(self.tri.badTris == True)[0]))
         #return len(self.tri.validVertIdxs()) - self.tri.instanceSize + len(np.where(self.tri.badTris == True)[0])
-        return len(self.tri.validVertIdxs()) - self.tri.instanceSize + 2* len(self.tri.getNonSuperseededBadTris()) + len(np.where(self.tri.badTris == True)[0])
+        return len(self.tri.validVertIdxs()) - self.tri.instanceSize + 2* len(self.tri.getNonSuperseededBadTris()) + 1.1*len(np.where(self.tri.badTris == True)[0])
 
     def solveEveryGP(self):
         for gp in self.tri.geometricSubproblemIterator():
             self.solver.solve(gp)
 
-    def realEvalActionList(self,unsafeActions,depth:int):
-        if depth == 0:
-            result = []
-            combinatorialState = self.tri.copyOfCombinatorialState()
-            for action in unsafeActions:
+    def lazyApplyAction(self,action:TriangulationAction,withUpdate=False):
+        if action.isTerminal:
+            return False, set(), set()
 
-                realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
+        #self.tri.plotTriangulation()
+        #print(action.addedPointIds,[(float(p.x()),float(p.y())) for p in action.addedPoints],action.removedPointIds)
+        pass
+        #self.tri.verifyReverseMap()
+        resultingKey = set([-2] + [self.tri.uniquePointIDs[i] for i in self.tri.validVertIdxs()])
+        startKey = self.tri.triangulationKey()
+
+        preTris = set()
+        for triIdx in self.tri.validTriIdxs():
+            preTris.add(self.tri.uniqueTriangleIDs[triIdx])
+
+        removedUnique = set()
+        for r in action.removedPointIds:
+            if (r >= len(self.tri.isValidVertex)) or (not self.tri.isValidVertex[r]):
+                logging.error(f"vertex {r} is not in the triangulation?!?!?")
+                continue
+            resultingKey.remove(self.tri.uniquePointIDs[r])
+            removedUnique.add(self.tri.uniquePointIDs[r])
+
+        addedUnique = set()
+        for p in action.addedPoints:
+            if self.uniqueIDManager.hasPoint(p) and (pID:=self.uniqueIDManager.getPointId(p)) in removedUnique:
+                removedUnique.remove(pID)
+                resultingKey.add(pID)
+                continue
+
+            if not self.tri.canAddPoint(p):
+                #logging.info(f"can not add point?")
+                #logging.info(f"can not add point?")
+                continue
+            pID = self.uniqueIDManager.safeAddPoint(p)
+            if pID in resultingKey:
+                #logging.info(f"{pID} already in triangulation?")
+                continue
+            resultingKey.add(pID)
+            addedUnique.add(pID)
+        changed = len(removedUnique) != 0 or len(addedUnique) != 0
+
+        if not changed:
+            #self.tri.verifyReverseMap()
+            return changed, set(), set()
+
+        resultingKey = tuple(sorted(resultingKey))
+        if not changed:
+            #logging.info("null action")
+            assert(startKey == resultingKey)
+        if self.uniqueIDManager.hasKey(resultingKey):
+            self.goodHit += 1
+            #logging.info("exists already :)")
+            self.tri.applyCombinatorialState(self.uniqueIDManager.getByKey(resultingKey))
+        else:
+            self.badHit += 1
+            #logging.info("doesnt exist already :(")
+            self.tri.applyUnsafeActionAndReturnSafeAction(action)
+            if(resultingKey != self.tri.triangulationKey()):
+                logging.info(f"key construction failed at {resultingKey}")
+                assert(False)
+            if withUpdate:
+                self.tri.updateGeometricProblems()
+                self.uniqueIDManager.addKeyObjectPair(resultingKey,self.tri.copyOfCombinatorialState())
+                self.uniqueIDManager.stateCounter += 1
+            else:
+                self.uniqueIDManager.addKeyObjectPair(resultingKey,self.tri.copyOfCombinatorialState(startKey))
+                self.uniqueIDManager.halfstateCounter += 1
+                self.uniqueIDManager.stateCounter += 1
+        newTris = set()
+        for triIdx in self.tri.validTriIdxs():
+            newTris.add(self.tri.uniqueTriangleIDs[triIdx])
+
+        goneTris = set()
+        addedTris = set()
+        for triIdx in newTris:
+            if triIdx not in preTris:
+                addedTris.add(triIdx)
+        for triIdx in preTris:
+            if triIdx not in newTris:
+                goneTris.add(triIdx)
+        #self.tri.verifyReverseMap()
+        #self.tri.plotTriangulation()
+        #pass
+        return changed, goneTris,addedTris
+
+    def lazyCombinatorialState(self):
+        key = self.tri.triangulationKey()
+        if self.uniqueIDManager.hasKey(key):
+            return self.uniqueIDManager.getByKey(key)
+        self.uniqueIDManager.addKeyObjectPair(key,self.tri.copyOfCombinatorialState())
+        self.uniqueIDManager.stateCounter += 1
+        return self.uniqueIDManager.getByKey(key)
+
+
+
+    def realEvalActionList(self,unsafeActions,depth:int,times=None,counts=None,mustModify=None):
+        iAmRoot = False
+
+        if times is None:
+            iAmRoot = True
+            times = [0,0,0,0,0,0]#combinatorial state creation, action application, list building, undo action, combinatorial state application, state eval
+            counts = [0,0,0,0,0,0]
+
+        numChildren = 10//(2-depth)
+
+        result = []
+        start = time.time()
+        combinatorialState = self.lazyCombinatorialState()
+        times[0] += time.time() - start
+        counts[0] += 1
+        for action in unsafeActions:
+            #logging.info(f"-----\napplication at depth {depth}:")
+            start = time.time()
+            changed, goneTris,addedTris  = self.lazyApplyAction(action,depth!=0)
+            statusString = " "*(10-(3*depth)) + " simple eval: " +  str(self.eval())
+            times[1] += time.time() - start
+            counts[1] += 1
+            #logging.info("-----")
+
+            firstCheckPassed = False
+
+            if mustModify is not None:
+
+                hasModified = False
+                for triIdx in goneTris:
+                    if triIdx in mustModify:
+                        hasModified = True
+                        break
+                if hasModified:
+                    firstCheckPassed = True
+            #VERY strongly discourage not changing the triangulation...
+            else:
+                firstCheckPassed = changed
+
+            if action.isTerminal:
+                if len(self.tri.getNonSuperseededBadTris())==0:
+                    start = time.time()
+                    result.append(self.eval()-0.1)
+                    times[5] += time.time() - start
+                    counts[5] += 1
+                else:
+                    result.append(np.iinfo(int).max)
+                logging.info(statusString + f" -> (T) {result[-1]}")
+
+            elif not changed:
+                result.append(np.iinfo(int).max)
+
+            elif (not firstCheckPassed):
                 result.append(self.eval())
+                logging.info(statusString + f" -> {result[-1]}")
 
-                #afterwards vertex state should be the same...
-                self.tri.undoAction(realAction)
-                #and then combinatorial state is the same as well hopefully
-                self.tri.applyCombinatorialState(combinatorialState)
-            return result
-        else:
-            result = []
-            for action in unsafeActions:
-                result.append(self.realEvalAction(action,depth,True))
-            return result
-
-
-
-
-    def realEvalAction(self,action:TriangulationAction,depth:int,fastAndGreedy=False):
-        assert(depth >= 0)
-        actualAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
-        myEval = -1
-        if depth == 0:
-            myEval = self.eval()
-        elif depth == 1:
-
-            unsafeSubactions = self.buildUnsafeActionList(-1, True,fastAndGreedy)
-            combinatorialState = self.tri.copyOfCombinatorialState()
-            #print(" "*(3-depth) + str(len(unsafeSubactions)))
-
-            # if we have actions:
-            for _, subaction, _ in unsafeSubactions:
-
-                realSubAction = self.tri.applyUnsafeActionAndReturnSafeAction(subaction)
-                subEval = self.eval()
-                if myEval == -1 or subEval < myEval:
-                    myEval = subEval
-
-                #afterwards vertex state should be the same...
-                self.tri.undoAction(realSubAction)
-                #and then combinatorial state is the same as well hopefully
-                self.tri.applyCombinatorialState(combinatorialState)
-
-            # no action to be applied :(
-            if myEval == -1:
-                myEval = self.eval()
-
-        else:
-            #deep eval
-            unsafeSubactions = self.buildUnsafeActionList(-1, True,fastAndGreedy)
-            #print(" "*(3-depth) + str(len(unsafeSubactions)))
-
-            #if we have actions:
-            for _, subaction, _ in unsafeSubactions:
-                subEval = self.realEvalAction(subaction, depth - 1)
-                if myEval == -1 or subEval < myEval:
-                    myEval = subEval
-
-            #no action to be applied :(
-            if myEval == -1:
-                myEval = self.eval()
-
-        self.tri.undoAction(actualAction)
-        self.tri.updateGeometricProblems(fastAndGreedy)
-        return myEval
-
-    def addCenterOfTriangle(self,id,threat,depth):
-        logging.info("convergence threat level: " + str(threat))
-        if threat < 10:
-            # if solved by altitudedrop, do so, else use complicated center
-            center = None
-            bA = eg.badAngle(self.tri.point(self.tri.triangles[id, 0]),
-                             self.tri.point(self.tri.triangles[id, 1]),
-                             self.tri.point(self.tri.triangles[id, 2]))
-            if self.tri.triangleMap[id, bA, 2] != noneEdge:
-                # logging.error("alt")
-                center = eg.altitudePoint(Segment(self.tri.point(self.tri.triangles[id, (bA + 1) % 3]),
-                                                  self.tri.point(self.tri.triangles[id, (bA + 2) % 3])),
-                                          self.tri.point(self.tri.triangles[id, bA]))
+            elif (depth == 0):
+                start = time.time()
+                result.append(self.eval())
+                times[5] += time.time() - start
+                counts[5] += 1
+                logging.info(statusString + f" -> {result[-1]}")
             else:
-                # logging.error("circ")
-                center = self.tri.findComplicatedCenter(id)
 
-            triang = list(self.tri.triangles[id])
-            added,newPointId = self.tri.addPoint(center)
-            if added:
-                logging.info("successfully added complicated Center of triangle " + str(id) + " at depth " + str(depth))
-                lastEdit = "circumcenter"
-                added = True
-                allIn = np.all([vIdx in self.tri.triangles[id] for vIdx in triang])
-                if allIn:
-                    logging.error("Addition did not flip the triangle even though it should...")
-                return True,TriangulationAction([center],[newPointId],[],[])
-            else:
-                logging.error(str(self.seed) + ": failed to add complicated Center of triangle " + str(id) + " at depth " + str(depth))
-                return False,None
-        elif threat < 20:
-            logging.info(str(self.seed) + ": reached convergence threat " + str(threat))
-            center = Point(*self.tri.circumCenters[id])
-            assert (center != None)
-            added,newPointId = self.tri.addPoint(center)
-            if added:
-                logging.info("successfully added circumcenter of triangle " + str(id) + " at depth " + str(
-                    depth))
-                return True,TriangulationAction([center],[newPointId],[],[])
-            else:
-                logging.info(str(self.seed) + ": failed to add circumcenter of triangle " + str(
-                    id) + " at depth " + str(depth))
-                return False,None
-        else:
-            logging.error(
-                str(self.seed) + ": reached convergence threat " + str(threat))
-            center = Point(eg.zero, eg.zero)
-            for i in range(3):
-                center += self.tri.point(self.tri.triangles[id, i])
-            center = center.scale(FieldNumber(1) / FieldNumber(3))
-            assert (center != None)
-            added,newPointId = self.tri.addPoint(center)
-            if added:
-                logging.info("successfully added centroid of triangle " + str(id) + " at depth " + str(
-                    depth))
-                return True,TriangulationAction([center],[newPointId],[],[])
-            else:
-                logging.error(
-                    str(self.seed) + ": failed to add centroid of triangle " + str(id) + " at depth " + str(
-                        depth))
-                return False,None
+                newMustModify = addedTris
+                if mustModify != None:
+                    for idx in mustModify:
+                        if idx not in goneTris:
+                            newMustModify.add(idx)
 
-    def improve(self):
+                # deep eval
+                start = time.time()
+                logging.info("~~~~~~~~~~~~~~~")
+                logging.info(f"list building at depth {depth}:")
+                unsafeSubactions = self.buildUnsafeActionList(numChildren, False, False,newMustModify)
+                logging.info("~~~~~~~~~~~~~~~")
+                times[2] += time.time() - start
+                counts[2] += 1
+                np.random.shuffle(unsafeSubactions)
+                # print(" "*(3-depth) + str(len(unsafeSubactions)))
+
+                if len(unsafeActions) == 0:
+                    #terminal node
+                    start = time.time()
+                    result.append(self.eval())
+                    times[5] += time.time() - start
+                    counts[5] += 1
+
+                actionList = [TriangulationAction([],[],[],[],False,True)] + [action for _,action,_ in unsafeSubactions][:numChildren+1]
+                evals = self.realEvalActionList(actionList,depth-1,times,counts,newMustModify)
+                myEval = min(evals) if min(evals) != np.iinfo(int).max else self.eval()
+                result.append(myEval) #I could have stopped in this node, so eval is an acceptable thing, but only if all subsequent moves are not valid
+                logging.info(statusString + f" -> {evals} -> {myEval}")
+
+            start = time.time()
+            self.tri.applyCombinatorialState(combinatorialState)
+            times[4] += time.time() - start
+            counts[4] += 1
+        if iAmRoot:
+            logging.info(f"cummulative times: \n   state creation in {times[0]}({counts[0]}) -> {safeDiv(times[0],counts[0])}\n   action application in {times[1]}({counts[1]}) -> {safeDiv(times[1],counts[1])}\n   list building in {times[2]}({counts[2]}) -> {safeDiv(times[2],counts[2])}\n   state application in {times[4]}({counts[4]}) -> {safeDiv(times[4],counts[4])}\n   state eval in {times[5]}({counts[5]}) -> {safeDiv(times[5],counts[5])}\n   --------------------------------\n   total: {np.sum(times)}")
+        logging.info(" "*(10-(3*depth))+str(result))
+        return result
+
+    def improve(self,circlepatch = None,dieAt = None):
+
+        #TODO list:
+        # - geometric problems should be hashed by inside AND outside, not just inside. maybe even the parameters of the solver?
+        # - pickle manager?
+        # - add more geometric problems?
+        # - with children only search through changed children
+
         actionStack = []
         keepGoing = True
         lastEdit = "None"
@@ -2909,7 +3759,7 @@ class QualityImprover:
         bestSofar = 1000
         self.convergenceDetectorDict = dict()
         convergenceEndCounter = 0
-        while keepGoing:
+        while keepGoing and (dieAt is None or (self.tri.getNumSteiner() < dieAt)):
             #logging.info("----- ACTIONSTACK -----")
             #for a in actionStack:
             #    logging.info(str([(float(p.x()),float(p.y())) for p in a.addedPoints]))
@@ -2929,7 +3779,7 @@ class QualityImprover:
             #    self.tri.plotTriangulation()
                 pass
 
-            logging.info(f"Round {round}: #Steiner = {len(self.tri.validVertIdxs()) - self.tri.instanceSize}, #>90° = {len( np.where(self.tri.badTris == True)[0])}, subproblems solved = {self.solver.succesfulSolves}, rep qual = {self.tri.getCoordinateQuality()}")
+            logging.info(f"Round {round}: #Steiner = {len(self.tri.validVertIdxs()) - self.tri.instanceSize}, #>90° = {len( np.where(self.tri.badTris == True)[0])}, subproblems solved = {self.solver.succesfulSolves}, rep qual = {self.tri.getCoordinateQuality()}, #IDs = {self.tri.uniqueIDManager.nextId}")
             numSteinerHistory.append(len(self.tri.validVertIdxs()) - self.tri.instanceSize)
             numBadTriHistory.append(len( np.where(self.tri.badTris == True)[0]))
             round += 1
@@ -2964,16 +3814,21 @@ class QualityImprover:
 
             #get best action
             #TODO: add early stopping up to k
-            numMoves = 15
-            actionList = self.buildUnsafeActionList(numMoves,False,False)
-            logging.info("identified " + str(len(actionList)) +" actions.")
+            numMoves = 10
+            start = time.time()
+            actionList = self.buildUnsafeActionList(-1,False,False)
+            logging.info(f"identified {len(actionList)} actions in {time.time() - start}")
             actionAdded = False
 
             betterEvalActionPairs = []
 
             depth = 1
-            actionList = actionList[:numMoves + 1]
+            actionList = actionList#[:numMoves + 1]
             np.random.shuffle(actionList)
+            #removeList = self.buildSingleRemoveList()
+            #np.random.shuffle(removeList)
+            #actionList.extend(removeList)
+            actionList = [(0,TriangulationAction([],[],[],[],False,True),None)] + actionList[:numMoves]
 
             actionValues = self.realEvalActionList([action for _,action,_ in actionList],depth)
 
@@ -2985,14 +3840,26 @@ class QualityImprover:
             #self.tri.updateGeometricProblems()
             maxConvergenceThisRound = -1
             betterEvalActionPairs = sorted(list(zip(actionValues,[action for _,action,_ in actionList])),key=lambda x:x[0])
+            logging.info("+-------------------------------------------------------------------------------------")
+            logging.info(f"| evaluated all {len(actionValues)} actions with {self.goodHit} good, and {self.badHit} bad hits. IDManager has {self.uniqueIDManager.stateCounter}(half:{self.uniqueIDManager.halfstateCounter}) states")
+            logging.info("+-------------------------------------------------------------------------------------")
+            self.goodHit = 0
+            self.badHit = 0
             #print([v for v,_ in betterEvalActionPairs])
-            for _,action in betterEvalActionPairs:
+            terminal = False
+            myValue = None
+            for value,action in betterEvalActionPairs:
+                logging.info(f"attempting to apply action (terminal?: {action.isTerminal}) with evaluation {value}")
+                if action.isTerminal:
+                    terminal = True
+                    myValue = value
+                    break
                 if len(action.addedPointIds) == 0 and len(action.removedPointIds) == 0:
                     continue
                 if np.min([self.convergenceDetectorDict.get(id,0) for id in action.addedPointIds] + [self.convergenceDetectorDict.get(id,0) for id in action.removedPointIds]) > 30:
                     continue
-                realAction = self.tri.applyUnsafeActionAndReturnSafeAction(action)
-                if len(realAction.addedPointIds) == 0 and len(realAction.removedPointIds) == 0:
+                changed, goneTris,addedTris  = self.lazyApplyAction(action,depth!=0)
+                if not changed:
                     for id in action.addedPointIds:
                         self.convergenceDetectorDict[id] = self.convergenceDetectorDict.get(id,0) + 1
                         maxConvergenceThisRound = max(maxConvergenceThisRound,self.convergenceDetectorDict[id])
@@ -3001,16 +3868,28 @@ class QualityImprover:
                         maxConvergenceThisRound = max(maxConvergenceThisRound,self.convergenceDetectorDict[id])
                     continue
                 actionAdded = True
-                actionStack.append(realAction)
+                actionStack.append(action)
+                myValue = value
                 break
-
+            if myValue is not None and myValue > 10000:
+                logging.info("something bad is in the air...")
+            if actionAdded:
+                logging.info("action was okay to add")
+            elif terminal:
+                logging.info("terminal action applied")
+            else:
+                logging.info("failed to add action...")
             #print(self.tri.watch)
             self.tri.watch=0
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
-            self.tri.plotTriangulation()
+            #self.tri.plotTriangulation()
             if plotUpdater == 1:
             #    self.tri.plotCoordinateQuality()
                 self.tri.plotTriangulation()
+                if circlepatch != None:
+                    self.tri.axs.add_patch(circlepatch)
+                plt.draw()
+                plt.pause(self.tri.plotTime)
                 plotUpdater = 0
             if not actionAdded:
                 if len(self.tri.getNonSuperseededBadTris()) == 0:
@@ -3024,8 +3903,16 @@ class QualityImprover:
                     else:
                         convergenceEndCounter += 1
         self.tri.plotTriangulation()
+
+        if circlepatch != None:
+            self.tri.axs.add_patch(circlepatch)
+        plt.draw()
+        plt.pause(self.tri.plotTime)
+
         self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
         plt.pause(0.5)
+        if len(self.tri.getNonSuperseededBadTris()) > 0:
+            logging.error("failed to output a valid triangulation...")
         return self.tri.solutionParse()
 
 class SolutionMerger:
@@ -3036,39 +3923,198 @@ class SolutionMerger:
         self.instancesize = len(instance.points_x)
         self.kdPool = [KDTree(tri.numericVerts[self.instancesize:]) for tri in triPool]
 
-    def attemptImprovement(self,tri:Triangulation):
+    def attemptImprovement(self,tri:Triangulation,axs=None):
+
         assert(len(tri.validVertIdxs()) == len(tri.exactVerts))#for now
-        myKDTree = KDTree(tri.numericVerts[self.instancesize:])
-        for x in tri.numericVerts:
-            for y in tri.numericVerts:
+        myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
+        triedReplacers = set()
+
+        myBest = tri.getNumSteiner()
+
+        bestImprov = tri.solutionParse()
+
+        seedpoints = np.copy(tri.numericVerts)
+        #np.random.seed(0)
+        #np.random.shuffle(seedpoints)
+
+        for x in seedpoints:
+            for y in seedpoints:
                 diff = y-x
-                r = np.sqrt((diff[0]*diff[0]) + (diff[1]*diff[1]))
+                r = np.sqrt((diff[0]*diff[0]) + (diff[1]*diff[1]))+0.01
                 myInsidePoints = myKDTree.query_ball_point(x,r)
                 if len(myInsidePoints) <= 2:
                     continue
                 if len(myInsidePoints)*5 > len(tri.numericVerts[self.instancesize:]):
                     continue
+                kdTreeNum = -1
                 for kdTree,triang in zip(self.kdPool,self.triPool):
+                    kdTreeNum += 1
                     inside = kdTree.query_ball_point(x,r)
                     if len(inside) == 0:
                         continue
-                    if len(inside) < len(myInsidePoints):
-                        print("attempting improvement... ",end="")
-                        pass
-                        #build new triangulation and improve it...
-                        tr = Triangulation(self.instance)
-                        insertSteinerpoints = []
-                        for i in range(self.instancesize,len(tri.exactVerts)):
-                            if (i-self.instancesize) in myInsidePoints:
-                                continue
-                            insertSteinerpoints.append(tri.point(i))
-                        for i in inside:
-                            insertSteinerpoints.append(triang.point(self.instancesize+i))
-                        print(f" of {self.instancesize + len(insertSteinerpoints)} vs {len(tri.exactVerts)}...",end="")
-                        tr.addPoints(insertSteinerpoints)
-                        qi = QualityImprover(tr)
-                        tr = qi.improve()
-                        if len(tr.steiner_points_x) + self.instancesize < len(tri.exactVerts):
-                            print("found improvement!!!")
-                        else:
-                            print(f"imprvement failed at {len(tr.steiner_points_x) + self.instancesize} >= {len(tri.exactVerts)}")
+                    if len(inside) >= len(myInsidePoints):
+                        continue
+
+                    trialID = tuple((tuple(sorted(myInsidePoints)),tuple(sorted(inside)),kdTreeNum))
+                    if trialID in triedReplacers:
+                        logging.info("already tried this replacement")
+                        continue
+
+                    triedReplacers.add(trialID)
+
+                    removeIds = [np.where(tri.isValidVertex)[0][id+tri.instanceSize] for id in myInsidePoints]
+
+                    insertSteinerpoints = []
+                    for i in inside:
+                        insertSteinerpoints.append(triang.point(self.instancesize+i))
+
+                    action = TriangulationAction(insertSteinerpoints,[-1 for _ in insertSteinerpoints],[],removeIds,False)
+                    state = tri.copyOfCombinatorialState()
+
+                    logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                    logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                    logging.info(f"attempting improvement of {tri.getNumSteiner() - len(removeIds) + len(insertSteinerpoints)} vs {tri.getNumSteiner()}... ")
+                    logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                    logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+
+                    qi = QualityImprover(tri,seed=0)
+                    qi.lazyApplyAction(action)
+
+                    tri.plotTriangulation()
+
+                    circle = plt.Circle((float(x[0]), float(x[1])),r,color="green",linewidth=2, fill=False, zorder=10000000)
+                    tri.axs.add_patch(circle)
+
+                    plt.draw()
+                    plt.pause(0.01)
+                    #tolerance of 2 for exploration?
+                    sol = qi.improve(circlepatch = circle,dieAt = myBest + 1)
+
+                    if tri.getNumSteiner() < myBest :
+                        logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        logging.info("found improvement!!!")
+                        logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
+                        myBest = tri.getNumSteiner()
+                        bestImprov = sol
+                        triedReplacers.clear()
+                        myInsidePoints = myKDTree.query_ball_point(x,r)
+                    else:
+                        logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        logging.info(f"improvement failed at {tri.getNumSteiner()} >= {myBest}")
+                        logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        tri.applyCombinatorialState(state)
+            #maybe reset triangulation?
+            #this resets the uniqieIDManager to conserve RAM
+            if tri.uniqueIDManager.nextId > 50000:
+                logging.info("resetting uniqueIDManager")
+                tri = Triangulation(self.instance,tri.withValidate,tri.seed,[tri.axs,tri.histoaxs,tri.histoaxtwin,tri.internalaxs,tri.gpaxs],True,[tri.point(idx) for idx in tri.validVertIdxs() if idx >= tri.instanceSize])
+            #myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
+        return bestImprov
+
+    def attemptImprovementRandomAsyncPosting(self,tri:Triangulation,lock,solutions,myLoc):
+
+        myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
+
+        triedReplacers = set()
+
+        myBest = tri.getNumSteiner()
+
+        bestImprov = tri.solutionParse()
+
+        #async posting
+        lock.aquire()
+        solutions[myLoc] = tri.solutionParse()
+        lock.release()
+
+        seedpoints = np.copy(tri.numericVerts)
+        allCombs = []
+        for x in range(len(seedpoints)):
+            for y in range(len(seedpoints)):
+                for kdTreeNum in range(len(self.kdPool)):
+                    allCombs.append((x,y,kdTreeNum))
+        np.random.shuffle(allCombs)
+
+        for xid,yid,kdTreeNum in allCombs:
+            x = seedpoints[xid]
+            y = seedpoints[yid]
+            diff = y-x
+            r = np.sqrt((diff[0]*diff[0]) + (diff[1]*diff[1]))+0.01
+            myInsidePoints = myKDTree.query_ball_point(x,r)
+
+            #too few or too many points of my solution inside
+            if len(myInsidePoints) <= 2:
+                continue
+            if len(myInsidePoints) > 10:
+                if len(myInsidePoints)*10 > len(tri.numericVerts[self.instancesize:]):
+                    continue
+
+            kdTree,triang = self.kdPool[kdTreeNum],self.triPool[kdTreeNum]
+
+            inside = kdTree.query_ball_point(x, r)
+            if len(inside) == 0:
+                continue
+            if len(inside) >= len(myInsidePoints):
+                continue
+
+            trialID = tuple((tuple(sorted(myInsidePoints)), tuple(sorted(inside)), kdTreeNum))
+            if trialID in triedReplacers:
+                logging.info("already tried this replacement")
+                continue
+
+            triedReplacers.add(trialID)
+
+            removeIds = [np.where(tri.isValidVertex)[0][id + tri.instanceSize] for id in myInsidePoints]
+
+            insertSteinerpoints = []
+            for i in inside:
+                insertSteinerpoints.append(triang.point(self.instancesize + i))
+
+            action = TriangulationAction(insertSteinerpoints, [-1 for _ in insertSteinerpoints], [], removeIds, False)
+            state = tri.copyOfCombinatorialState()
+
+            logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            logging.info(f"attempting improvement of {tri.getNumSteiner() - len(removeIds) + len(insertSteinerpoints)} vs {tri.getNumSteiner()}... ")
+            logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+
+            qi = QualityImprover(tri, seed=0)
+            qi.lazyApplyAction(action)
+
+            # tolerance of 2 for exploration?
+            sol = qi.improve(dieAt=myBest + 1)
+
+            if tri.getNumSteiner() < myBest:
+                logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logging.info("found improvement!!!")
+                logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
+                myBest = tri.getNumSteiner()
+                bestImprov = sol
+                lock.aquire()
+                solutions[myLoc] = tri.solutionParse()
+                lock.release()
+                triedReplacers.clear()
+            else:
+                logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logging.info(f"improvement failed at {tri.getNumSteiner()} >= {myBest}")
+                logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                tri.applyCombinatorialState(state)
+            # maybe reset triangulation?
+            # this resets the uniqieIDManager to conserve RAM
+            if tri.uniqueIDManager.nextId > 50000:
+                logging.info("resetting uniqueIDManager")
+                steinerpoints = [tri.point(idx) for idx in tri.validVertIdxs() if idx >= tri.instanceSize]
+                tri.__init__(self.instance, tri.withValidate, tri.seed,
+                                    [tri.axs, tri.histoaxs, tri.histoaxtwin, tri.internalaxs, tri.gpaxs], True,
+                                    steinerpoints)
+        #return bestImprov

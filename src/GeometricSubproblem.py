@@ -6,10 +6,9 @@ import matplotlib.pyplot as plt
 import exact_geometry as eg
 from cgshop2025_pyutils.geometry import Point, Segment, FieldNumber, intersection_point
 
-
 class GeometricSubproblem:
     def __init__(self, vIdxs, triIdxs, boundary, exactPoints, numericPoints, innerCons, boundaryCons, boundaryType,
-                 steinercutoff, numBadTris,numBoundaryDroppers,guaranteeOutside=None, gpType ="None", maxTolerance=None, axs=None):
+                 steinercutoff, numBadTris,numBoundaryDroppers,guaranteeOutside=None, gpType =eg.NONE, maxTolerance=None, axs=None):
         # some housekeeping to have some handle on what to delete later
 
         # lets make this better
@@ -134,11 +133,11 @@ class GeometricSubproblem:
         for e in self.boundarySegs:
             eIdx = self.getSegmentIdx(e)
             if eIdx == noneEdge:
-                boundaryType.append("None")
+                boundaryType.append(eg.NONE)
             elif outsideType[eIdx]:
-                boundaryType.append("boundary")
+                boundaryType.append(eg.BOUNDARY)
             else:
-                boundaryType.append("halfin")
+                boundaryType.append(eg.HALFIN)
         self.boundaryType = np.array(boundaryType)
         self.insideSegs = insideCons
 
@@ -156,9 +155,9 @@ class GeometricSubproblem:
         for edgeId in range(len(self.boundarySegs)):
             e = self.boundarySegs[edgeId]
             color = "black"
-            if self.boundaryType[edgeId] == "halfin":
+            if self.boundaryType[edgeId] == eg.HALFIN:
                 color = "forestgreen"
-            elif self.boundaryType[edgeId] == "boundary":
+            elif self.boundaryType[edgeId] == eg.BOUNDARY:
                 color = "blue"
             self.axs.plot(*self.numericVerts[e].T, color=color, linewidth=2, zorder=98)
 
@@ -244,7 +243,7 @@ class StarSolver:
             for i,j in boundary:
                 if i == pIdx or j == pIdx:
                     continue
-                if eg.onWhichSide(Segment(self.points[i],self.points[j]),p) != "left":
+                if eg.onWhichSide(Segment(self.points[i],self.points[j]),p) != eg.LEFT:
                     isGood = False
                     break
                 if eg.isBadTriangle(self.points[i],self.points[j],p):
@@ -324,7 +323,7 @@ class StarSolver:
                     isGood = False
                     break
 
-            if (len([c for c, rsq in gp.guaranteeOutside if eg.inCircle(c, rsq, q) != "outside"]) > self.outsideTolerance):
+            if (len([c for c, rsq in gp.guaranteeOutside if eg.inCircle(c, rsq, q) != eg.OUTSIDE]) > self.outsideTolerance):
                 isGood = False
             if isGood:
                 if len(goodIntervals) == 0:
@@ -377,7 +376,7 @@ class StarSolver:
         for i in range(len(self.points)):
             nextI = (i+1)%len(self.points)
             nextnextI = (i+2)%len(self.points)
-            if eg.onWhichSide(Segment(self.points[i],self.points[nextI]),self.points[nextnextI]) == "right":
+            if eg.onWhichSide(Segment(self.points[i],self.points[nextI]),self.points[nextnextI]) == eg.RIGHT:
                 return False,[]
 
         sameRays = False
@@ -441,14 +440,14 @@ class StarSolver:
                         inside = True
                         for i in range(len(self.points)):
                             nextI = (i + 1) % len(self.points)
-                            if eg.onWhichSide(Segment(self.points[i], self.points[nextI]),p) == "right":
+                            if eg.onWhichSide(Segment(self.points[i], self.points[nextI]),p) == eg.RIGHT:
                                 inside = False
                                 break
                         if not inside:
                             continue
                         candidateIntersections.append(p)
             #now filter out every point that lies inside a guaranteeoutsidecircle
-            candidateIntersections = [ci for ci in candidateIntersections if len([ c for c,rsq in gp.guaranteeOutside if eg.inCircle(c,rsq,ci) != "outside"])<= self.outsideTolerance]
+            candidateIntersections = [ci for ci in candidateIntersections if len([ c for c,rsq in gp.guaranteeOutside if eg.inCircle(c,rsq,ci) != eg.OUTSIDE])<= self.outsideTolerance]
             candidateIntersections = [ci for ci in candidateIntersections if filterFunction(ci)]
 
             #TODO: better evaluate for partially solved faces, that respects on which boundary is being dropped. this requires more complicated hashes i think...
@@ -492,9 +491,9 @@ class StarSolver:
                 for bIdx in pointList[0][0]:
                     #add weight corresponding to the expected cost of solving, which is one on the boundary, and faceweight everywhere else
                     #myEval += self.faceWeight
-                    if boundaryType[bIdx] == "boundary":
+                    if boundaryType[bIdx] == eg.BOUNDARY:
                         myEval += self.boundarySteinerWeight + (1 / 32) #slightly increase weight to make it not be better than just solving the face, improving stability
-                    #elif boundaryType[bIdx] == "halfin":
+                    #elif boundaryType[bIdx] == eg.HALFIN:
                     #    myEval += self.faceWeight + (1/32) #discourage constrained segments as the only bad triangles
                     else:
                         myEval += self.faceWeight
@@ -512,7 +511,7 @@ class StarSolver:
                     for bIdx in range(len(boundary)):
                         i,j = boundary[bIdx]
                         bi,bj = self.points[i],self.points[j]
-                        if eg.onWhichSide(Segment(bi,bj),centroid) == "right":
+                        if eg.onWhichSide(Segment(bi,bj),centroid) == eg.RIGHT:
                             isVeryBad = True
                             break
                         if eg.isBadTriangle(bi,bj,centroid):
@@ -538,12 +537,12 @@ class StarSolver:
                             if not filterFunction(sol[0]):
                                 continue
                         myEval = eval
-                        if boundaryType[bIdx] == "boundary":
+                        if boundaryType[bIdx] == eg.BOUNDARY:
                             pass
                             #myEval += #self.boundarySteinerWeight
                             #if hasClean:
                             #    myEval += self.cleanWeight
-                        elif boundaryType[bIdx] == "halfin":
+                        elif boundaryType[bIdx] == eg.HALFIN:
                             myEval += self.halfInSteinerWeight
                         else:
                             myEval += self.unconstrainedSteinerWeight
@@ -564,7 +563,7 @@ class StarSolver:
             rps = rootPoints[bIdx]
             diff = self.points[j]-self.points[i]
             orth = Point(eg.zero-diff.y(),diff.x())
-            if eg.onWhichSide(Segment(self.points[i],self.points[j]), self.points[i] + orth) != "left":
+            if eg.onWhichSide(Segment(self.points[i],self.points[j]), self.points[i] + orth) != eg.LEFT:
                 orth = orth.scale(FieldNumber(-1))
 
             for root in rps:
@@ -572,7 +571,7 @@ class StarSolver:
                 intersected = False
                 for offset in range(1,len(boundary)):
                     qId,nextQId = boundary[(bIdx+offset)%len(boundary)]
-                    if eg.onWhichSide(ray,self.points[qId]) != "left" and eg.onWhichSide(ray,self.points[nextQId]) != "right":
+                    if eg.onWhichSide(ray,self.points[qId]) != eg.LEFT and eg.onWhichSide(ray,self.points[nextQId]) != eg.RIGHT:
                         inter = eg.supportingRayIntersectSegment(ray,Segment(self.points[qId],self.points[nextQId]))
                         if inter == None:
                             #this means we are walking behind i think
@@ -616,7 +615,7 @@ class StarSolver:
                 sf1boundaryType.append(boundaryType[it])
                 it = (it + 1) % len(self.points)
                 subface1.append(it)
-            sf1boundaryType.append("None")
+            sf1boundaryType.append(eg.NONE)
 
             segSF2Orientation = Segment(self.points[con[0]],self.points[con[1]])
             subface1Boundary = np.vstack((subface1,np.roll(subface1,-1))).T
@@ -631,7 +630,7 @@ class StarSolver:
                 sf2boundaryType.append(boundaryType[it])
                 it = (it + 1) % len(self.points)
                 subface2.append(it)
-            sf2boundaryType.append("None")
+            sf2boundaryType.append(eg.NONE)
 
             segSF1Orientation = Segment(self.points[con[1]],self.points[con[0]])
             subface2Boundary = np.vstack((subface2,np.roll(subface2,-1))).T
@@ -756,13 +755,13 @@ class StarSolver:
         boundary = np.array(boundary)
         constraints = np.array(constraints)
 
-        if self.getOrientationOfPoints(self.points) == "right":
+        if self.getOrientationOfPoints(self.points) == eg.RIGHT:
             self.points = self.points[::-1]
             boundaryType = np.roll(boundaryType[::-1],-1)
             #self.boundary = np.full(self.boundary.shape,len(gp.boundaryVertices)-1) - self.boundary
             constraints = np.full(constraints.shape,len(gp.boundaryVertices)-1) - constraints
 
-        assert(self.getOrientationOfPoints(self.points) == "left")
+        assert(self.getOrientationOfPoints(self.points) == eg.LEFT)
 
         rays,circles = self.constructRaysAndCircles(boundary)
 
