@@ -530,7 +530,7 @@ def mergerPool():
             tts = np.array(times)
             print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
             print("CURRENT ID:")
-            print(np.array(currentInstance))
+            print(np.array(instanceNos))
 
             #saving:
             solLoc = filepath.parent.parent / "instance_solutions"
