@@ -450,6 +450,7 @@ def pooledMergeWorker(index):
     sol = None
     try:
 
+        lock.acquire()
         #load solutions
         filepath = Path(__file__)
         summaryFolder = filepath.parent.parent / "solution_summaries"
@@ -469,6 +470,7 @@ def pooledMergeWorker(index):
                 else:
                     solutions.append(solution)
         #best now has best solution, solutions holds arra of all other solutions
+        lock.release()
 
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
         bestTri = triangulationFromSolution(instance,bestSol)
@@ -556,7 +558,8 @@ if __name__=="__main__":
     parser.add_argument("--parallel",type=bool,default=False)
     args = parser.parse_args()
     if args.parallel:
-        seededPool()
+        #seededPool()
+        mergerPool()
     else:
 
         #np.random.seed(1337)
