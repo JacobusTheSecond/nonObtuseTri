@@ -83,10 +83,6 @@ def loadBestOfSummaries():
             else:
                 i = 0
                 for solution in ZipSolutionIterator(summary):
-                    if i == 7:
-                        print(len(solution.steiner_points_x),summary.name)
-                    if i == 0:
-                        print(len(solution.steiner_points_x))
                     if len(solution.steiner_points_x) < len(best[i].steiner_points_x):
                         best[i] = solution
                     i += 1

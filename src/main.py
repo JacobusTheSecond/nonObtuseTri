@@ -17,6 +17,7 @@ from cgshop2025_pyutils.geometry import Point, FieldNumber
 
 from solutionManagement import updateSummaries
 from Triangulation import SolutionMerger
+from src.solutionManagement import loadBestOfSummaries
 
 exact = True
 if exact:
@@ -500,7 +501,7 @@ def mergerPool():
     manager = multiprocessing.Manager()
     numInstances = len([None for _ in idb])
     logging.error(f"number of instances: {numInstances}")
-    returner = manager.list([None for _ in idb])
+    returner = manager.list(loadBestOfSummaries())
     startSize = [-1 for _ in idb]
     best = manager.list([-1 for _ in idb])
     times = manager.list([-1 for _ in range(numThreads)])
