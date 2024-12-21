@@ -398,6 +398,7 @@ def mergeEveryInstance():
         else:
             #handcrafted solution
             pass
+            pass
 
         bestSolution = best[i]
         otherSolutions = [sol[i] for sol in solutions]
