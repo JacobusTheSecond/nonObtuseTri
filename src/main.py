@@ -351,7 +351,7 @@ def triangulationFromSolution(instance,solution,axs=None):
         ps.append(Point(FieldNumber(x),FieldNumber(y)))
     tr = Triangulation(instance,withGeometricUpdate=False,axs=axs,steinerpoints=ps)
     if len(tr.getNonSuperseededBadTris()) > 0:
-        logging.error(f"Triangulation has {len(tr.getNonSuperseededBadTris())} bad tris, but verify says it has {verify(instance,solution).num_obtuse_triangles}...")
+        logging.error(f"{instance.instance_uid}: Triangulation has {len(tr.getNonSuperseededBadTris())} bad tris, but verify says it has {verify(instance,solution).num_obtuse_triangles}...")
     return tr
 
 
