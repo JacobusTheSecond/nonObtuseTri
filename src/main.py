@@ -568,8 +568,9 @@ def mergerPool():
                 with open(pickelName, "wb") as f:
                     logging.info("writting name summary at " + str(pickelName))
                     pickle.dump(toWriteNames, f)
+                print("succesfully wrote to file :)")
             except:
-                print("some error occured")
+                print("some error occured :(")
             lock.release()
 
     solLoc = filepath.parent.parent / "solution_summaries"
@@ -590,8 +591,9 @@ def mergerPool():
         with open(pickelName, "wb") as f:
             logging.info("writting name summary at " + str(pickelName))
             pickle.dump(toWriteNames, f)
+            print("succesfully wrote to file :)")
     except:
-        print("some error occured")
+        print("some error occured :(")
     updateSummaries()
 
 
