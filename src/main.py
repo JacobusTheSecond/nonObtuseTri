@@ -515,9 +515,9 @@ def mergerPool():
             improvementSofar = np.array([-1 for _ in idb])
             for i in range(len(returner)):
                 sizeOfI = -1
-                curQual[i] = sizeOfI
                 if returner[i] != None:
                     sizeOfI = len(returner[i].steiner_points_x)
+                    curQual[i] = sizeOfI
                     if startSize[i] == -1:
                         startSize[i] = sizeOfI
                     improvementSofar[i] = startSize[i] - sizeOfI
