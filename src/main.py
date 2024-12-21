@@ -470,7 +470,7 @@ def pooledMergeWorker(index):
         #best now has best solution, solutions holds arra of all other solutions
         lock.release()
 
-        logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished loading solutions on instanceId {instanceIdx} of name {instance.instance_uid}")
+        logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished loading {len(solutions)} solutions on instanceId {instanceIdx} of name {instance.instance_uid}")
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
         bestTri = triangulationFromSolution(instance,bestSol)
         sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx)
