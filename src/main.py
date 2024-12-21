@@ -345,14 +345,12 @@ def seededPool():
         updateSummaries()
 
 def triangulationFromSolution(instance,solution,axs=None):
-    print(f"loading solution for {instance.instance_uid}...",end="")
+    logging.info(f"loading solution for {instance.instance_uid}...")
     tr = Triangulation(instance,withGeometricUpdate=False,axs=axs)
     ps = []
     for x,y in zip(solution.steiner_points_x,solution.steiner_points_y):
         ps.append(Point(FieldNumber(x),FieldNumber(y)))
-    print("adding...",end="")
     tr.addPoints(ps)
-    print("done")
     return tr
 
 
@@ -472,6 +470,7 @@ def pooledMergeWorker(index):
         #best now has best solution, solutions holds arra of all other solutions
         lock.release()
 
+        logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished loading solutions on instanceId {instanceIdx} of name {instance.instance_uid}")
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
         bestTri = triangulationFromSolution(instance,bestSol)
         sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx)
@@ -506,7 +505,11 @@ def mergerPool():
     with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,None,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledMergeWorker,range(numInstances),chunksize=1)
 
+        numUpdates = 0
         while not result.ready():
+
+            numUpdates += 1
+
             lock.acquire()
             curQual = np.array([-1 for _ in idb])
             improvementSofar = np.array([-1 for _ in idb])
@@ -531,8 +534,17 @@ def mergerPool():
             print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
             print("CURRENT ID:")
             print(np.array(instanceNos))
+            lock.release()
+
+            time.sleep(5)
+
+            if numUpdates < 12:
+                continue
+
 
             #saving:
+            numUpdates = 0
+            lock.acquire()
             solLoc = filepath.parent.parent / "instance_solutions"
             solname = "merger.zip"
 
@@ -547,7 +559,6 @@ def mergerPool():
                 print("some error occured")
 
             lock.release()
-            time.sleep(60)
 
     updateSummaries()
 
