@@ -4021,7 +4021,7 @@ class SolutionMerger:
         myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
 
         if len(tri.getNonSuperseededBadTris() > 0):
-            logging.error(f" {self.instance.instance_uid} gave unfinished triangulation?!?!?!")
+            logging.error(f" {self.instance.instance_uid} gave unfinished triangulation of size {tri.getNumSteiner()}?!?!?!")
             qi = QualityImprover(tri)
             qi.improve()
 
