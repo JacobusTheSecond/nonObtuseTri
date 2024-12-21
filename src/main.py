@@ -503,7 +503,7 @@ def mergerPool():
     instanceNos = manager.list([-1 for _ in range(numThreads)])
     lock = manager.Lock()
     logging.error("staring up pool...")
-    with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,seeds,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
+    with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,None,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledWorkerFunction,range(numInstances),chunksize=1)
 
         while not result.ready():
