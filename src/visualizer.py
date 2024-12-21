@@ -219,10 +219,11 @@ if __name__=="__main__":
     new3 = filepath.parent.parent/"instance_solutions"/"288CircleArrNoOutRNoSegs"
     new4 = filepath.parent.parent/"instance_solutions"/"288CircleArr2OutRNoSegs"
     new5 = filepath.parent.parent/"instance_solutions"/"withDepth1Greedy"
+    merged = filepath.parent.parent/"instance_solutions"/"merged_summaries"
 
     allexceptnumeric = [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    compareSolutions(others=[new5],base=[new4,new3,new3Old] + allexceptnumeric)#[new1,new2,out])
+    compareSolutions(others=[merged],base=[new5,new4,new3,new3Old] + allexceptnumeric)#[new1,new2,out])
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
