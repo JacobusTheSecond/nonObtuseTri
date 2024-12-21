@@ -259,6 +259,8 @@ class Triangulation:
             trueAction = self.applyUnsafeActionAndReturnSafeAction(action)
             assert(len(trueAction.addedPoints) == len(steinerpoints))
 
+        self.ensureDelauney(None)
+
 
         #vertex spawners
         self.steinerGpKeys = set()
