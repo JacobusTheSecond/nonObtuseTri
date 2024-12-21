@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --account=ag_ifi_driemel
-#SBATCH --job-name=seededRunsOutside
-#SBATCH --output=out/logDepth1
+#SBATCH --job-name=gigaCombiner
+#SBATCH --output=out/log
 #
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=96
-#SBATCH --partition=lm_long
+#SBATCH --partition=lm_medium
 #SBATCH --mem=900G
-#SBATCH --time=5-00:00:00
+#SBATCH --time=1-00:00:00
 
 module load Anaconda3
 
