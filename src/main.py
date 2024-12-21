@@ -15,9 +15,8 @@ import numpy as np
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
 from cgshop2025_pyutils.geometry import Point, FieldNumber
 
-from solutionManagement import updateSummaries
+from solutionManagement import updateSummaries, loadBestOfSummaries
 from Triangulation import SolutionMerger
-from src.solutionManagement import loadBestOfSummaries
 
 exact = True
 if exact:
