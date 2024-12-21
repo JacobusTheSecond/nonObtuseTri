@@ -551,21 +551,48 @@ def mergerPool():
             #saving:
             numUpdates = 0
             lock.acquire()
-            solLoc = filepath.parent.parent / "instance_solutions"
-            solname = "merger.zip"
-
+            solLoc = filepath.parent.parent / "solution_summaries"
+            summaryName = solLoc / "merged_summaries.zip"
+            pickelName = solLoc / "merged_summaries.pkl"
             try:
-                if (solLoc / solname).exists():
-                    (solLoc / solname).unlink()
+                if summaryName.exists():
+                    summaryName.unlink()
 
-                with ZipWriter(solLoc / solname) as zw:
+                if pickelName.exists():
+                    pickelName.unlink()
+                # Write the solutions to a new zip file
+                toWriteNames = [solLoc / "merged_summaries.zip" for _ in range(150)]
+                with ZipWriter(summaryName) as zw:
+                    logging.info("writting sol summary at " + str(summaryName))
                     for solution in returner:
                         zw.add_solution(solution)
+                with open(pickelName, "wb") as f:
+                    logging.info("writting name summary at " + str(pickelName))
+                    pickle.dump(toWriteNames, f)
             except:
                 print("some error occured")
-
             lock.release()
 
+    solLoc = filepath.parent.parent / "solution_summaries"
+    summaryName = solLoc / "merged_summaries.zip"
+    pickelName = solLoc / "merged_summaries.pkl"
+    try:
+        if summaryName.exists():
+            summaryName.unlink()
+
+        if pickelName.exists():
+            pickelName.unlink()
+        # Write the solutions to a new zip file
+        toWriteNames = [solLoc / "merged_summaries.zip" for _ in range(150)]
+        with ZipWriter(summaryName) as zw:
+            logging.info("writting sol summary at " + str(summaryName))
+            for solution in returner:
+                zw.add_solution(solution)
+        with open(pickelName, "wb") as f:
+            logging.info("writting name summary at " + str(pickelName))
+            pickle.dump(toWriteNames, f)
+    except:
+        print("some error occured")
     updateSummaries()
 
 
