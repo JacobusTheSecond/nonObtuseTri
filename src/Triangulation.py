@@ -3739,7 +3739,7 @@ class QualityImprover:
         logging.info(" "*(10-(3*depth))+str(result))
         return result
 
-    def improve(self,circlepatch = None,dieAt = None):
+    def improve(self,circlepatch = None,dieAt = None,maxRounds=None):
 
         #TODO list:
         # - geometric problems should be hashed by inside AND outside, not just inside. maybe even the parameters of the solver?
@@ -3759,7 +3759,7 @@ class QualityImprover:
         bestSofar = 1000
         self.convergenceDetectorDict = dict()
         convergenceEndCounter = 0
-        while keepGoing and (dieAt is None or (self.tri.getNumSteiner() < dieAt)):
+        while keepGoing and (maxRounds is None or round < maxRounds) and (dieAt is None or (self.tri.getNumSteiner() < dieAt)):
             #logging.info("----- ACTIONSTACK -----")
             #for a in actionStack:
             #    logging.info(str([(float(p.x()),float(p.y())) for p in a.addedPoints]))
@@ -4087,7 +4087,7 @@ class SolutionMerger:
             qi.lazyApplyAction(action)
 
             # tolerance of 2 for exploration?
-            sol = qi.improve(dieAt=myBest + 1)
+            sol = qi.improve(dieAt=myBest + 1,maxRounds=50)
 
             if tri.getNumSteiner() < myBest:
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
