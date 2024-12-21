@@ -4027,7 +4027,7 @@ class SolutionMerger:
         bestImprov = tri.solutionParse()
 
         #async posting
-        lock.aquire()
+        lock.acquire()
         solutions[myLoc] = tri.solutionParse()
         lock.release()
 
@@ -4098,7 +4098,7 @@ class SolutionMerger:
                 myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
                 myBest = tri.getNumSteiner()
                 bestImprov = sol
-                lock.aquire()
+                lock.acquire()
                 solutions[myLoc] = tri.solutionParse()
                 lock.release()
                 triedReplacers.clear()
