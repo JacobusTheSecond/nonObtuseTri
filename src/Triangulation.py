@@ -3911,8 +3911,8 @@ class QualityImprover:
 
         self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
         plt.pause(0.5)
-        if len(self.tri.getNonSuperseededBadTris()) > 0:
-            logging.error("failed to output a valid triangulation...")
+        #if len(self.tri.getNonSuperseededBadTris()) > 0:
+        #    logging.error("failed to output a valid triangulation...")
         return self.tri.solutionParse()
 
 class SolutionMerger:
