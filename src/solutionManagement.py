@@ -126,13 +126,14 @@ def updateSummaries():
     zips = filepath.parent.parent/"challenge_instances_cgshop25" / "zips"
     idb = InstanceDatabase(zips/"challenge_instances_cgshop25_rev1.zip")
 
-    for sol in best:
+    for i in range(len(best)):
+        sol = best[i]
         print("final verification of " +sol.instance_uid,end="")
         verRes = verify(idb[sol.instance_uid],sol)
-        if verRes:
+        if verRes.num_obtuse_triangles == 0:
             print(" SUCCESS!")
         else:
-            print(" FAILURE!")
+            print(f" FAILURE with {verRes.num_obtuse_triangles} obtuse triangles :(!")
 
     if bestName.exists():
         bestName.unlink()
