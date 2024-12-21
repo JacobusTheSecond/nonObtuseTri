@@ -5,6 +5,22 @@ from matplotlib import pyplot as plt
 zero = FieldNumber(0)
 onehalf = FieldNumber(0.5)
 
+
+INSIDE = np.iinfo(int).max
+OUTSIDE = INSIDE - 1
+ON = INSIDE - 2
+COLINEAR = INSIDE - 3
+LEFT = INSIDE - 4
+RIGHT = INSIDE - 5
+NONE = INSIDE - 6
+VERTEX = INSIDE - 7
+EXACT = INSIDE - 8
+NONEXACT = INSIDE - 9
+BOUNDARY = INSIDE - 10
+HALFIN = INSIDE  - 11
+
+
+
 #dotproduct
 def dot(X:Point, Y:Point) -> FieldNumber:
     return (X[0]*Y[0]) + (X[1]*Y[1])
@@ -149,28 +165,39 @@ def onWhichSide(ab:Segment,p:Point):
     sourceOrth = Point(diff.y(),zero-diff.x())
     dotp = dot(p-ab.source(),sourceOrth)
     if dotp>zero:
-        return "right"
+        return RIGHT
     elif dotp< zero:
-        return "left"
-    return "colinear"
+        return LEFT
+    return COLINEAR
 
 def inCircle(m:Point,rsqr:FieldNumber,p:Point):
     dotmp = dot(p-m,p-m)
     if dotmp > rsqr:
-        return "outside"
+        return OUTSIDE
     elif dotmp < rsqr:
-        return "inside"
+        return INSIDE
     else:
-        return "on"
+        return ON
 
 def segmentIntersectsCircle(m:Point,rsqr:FieldNumber,pq:Segment):
-    if inCircle(m,rsqr,pq.source()) != "outside" or inCircle(m,rsqr,pq.target()) != "outside":
+    if inCircle(m,rsqr,pq.source()) != OUTSIDE or inCircle(m,rsqr,pq.target()) != OUTSIDE:
         return True
     if pq.squared_length() == FieldNumber(0):
-        return inCircle(m,rsqr,pq.source()) != "outside"
+        return inCircle(m,rsqr,pq.source()) != OUTSIDE
     mid = altitudePoint(pq,m)
     if FieldNumber(0) <= dot(mid-pq.source(),pq.target() - pq.source()) <= pq.squared_length():
-        if inCircle(m,rsqr,mid) != "outside":
+        if inCircle(m,rsqr,mid) != OUTSIDE:
+            return True
+    return False
+
+def segmentInnerIntersectsCircle(m:Point,rsqr:FieldNumber,pq:Segment):
+    if inCircle(m,rsqr,pq.source()) == INSIDE or inCircle(m,rsqr,pq.target()) == INSIDE:
+        return True
+    if pq.squared_length() == FieldNumber(0):
+        return inCircle(m,rsqr,pq.source()) == INSIDE
+    mid = altitudePoint(pq,m)
+    if FieldNumber(0) <= dot(mid-pq.source(),pq.target() - pq.source()) <= pq.squared_length():
+        if inCircle(m,rsqr,mid) == INSIDE:
             return True
     return False
 
@@ -182,26 +209,26 @@ def insideIntersectionsSegmentCircle(m:Point,rsqr:FieldNumber,pq:Segment):
     inCircP = inCircle(m,rsqr,p)
     inCircQ = inCircle(m,rsqr,q)
     if pq.squared_length() == FieldNumber(0):
-        if inCircP == "on":
+        if inCircP == ON:
             return [p]
         else:
             return []
-    if inCircP == "inside" and inCircQ == "inside":
+    if inCircP == INSIDE and inCircQ == INSIDE:
         return []
-    if inCircP == "outside" and inCircQ == "outside":
+    if inCircP == OUTSIDE and inCircQ == OUTSIDE:
         #mid must be inside or on, otherwise we would have aborted earlier
         mid = altitudePoint(pq,m)
-        if inCircle(m,rsqr,mid) == "on":
+        if inCircle(m,rsqr,mid) == ON:
             return [mid]
         else:
             return [binaryIntersectionInside(m,rsqr,Segment(mid,p))[1],binaryIntersectionInside(m,rsqr,Segment(mid,q))[1]]
-    if inCircP == "inside" or inCircQ == "inside":
+    if inCircP == INSIDE or inCircQ == INSIDE:
         return [binaryIntersectionInside(m,rsqr,pq)[1]]
-    if inCircP == "on" and inCircQ == "on":
+    if inCircP == ON and inCircQ == ON:
         return [p,q]
     onPoint = p
     outPoint = q
-    if inCircP == "outside":
+    if inCircP == OUTSIDE:
         onPoint = q
         outPoint = p
     mid = altitudePoint(Segment(onPoint,outPoint),m)
@@ -217,26 +244,26 @@ def outsideIntersectionsSegmentCircle(m:Point,rsqr:FieldNumber,pq:Segment):
     inCircP = inCircle(m,rsqr,p)
     inCircQ = inCircle(m,rsqr,q)
     if pq.squared_length() == FieldNumber(0):
-        if inCircP == "on":
+        if inCircP == ON:
             return [p]
         else:
             return []
-    if inCircP == "inside" and inCircQ == "inside":
+    if inCircP == INSIDE and inCircQ == INSIDE:
         return []
-    if inCircP == "outside" and inCircQ == "outside":
+    if inCircP == OUTSIDE and inCircQ == OUTSIDE:
         #mid must be inside or on, otherwise we would have aborted earlier
         mid = altitudePoint(pq,m)
-        if inCircle(m,rsqr,mid) == "on":
+        if inCircle(m,rsqr,mid) == ON:
             return [mid]
         else:
             return [binaryIntersection(m,rsqr,Segment(mid,p))[1],binaryIntersection(m,rsqr,Segment(mid,q))[1]]
-    if inCircP == "inside" or inCircQ == "inside":
+    if inCircP == INSIDE or inCircQ == INSIDE:
         return [binaryIntersection(m,rsqr,pq)[1]]
-    if inCircP == "on" and inCircQ == "on":
+    if inCircP == ON and inCircQ == ON:
         return [p,q]
     onPoint = p
     outPoint = q
-    if inCircP == "outside":
+    if inCircP == OUTSIDE:
         onPoint = q
         outPoint = p
     mid = altitudePoint(Segment(onPoint,outPoint),m)
@@ -252,28 +279,28 @@ def outsideClipSegmentToCircle(m:Point,rsqr:FieldNumber,pq:Segment):
     inCircP = inCircle(m,rsqr,p)
     inCircQ = inCircle(m,rsqr,q)
     if pq.squared_length() == FieldNumber(0):
-        if inCircP == "on":
+        if inCircP == ON:
             return [p]
-        elif inCircP == "inside":
+        elif inCircP == INSIDE:
             return [p,p]
-    if inCircP == "inside" and inCircQ == "inside":
+    if inCircP == INSIDE and inCircQ == INSIDE:
         return [p,q]
-    if inCircP == "outside" and inCircQ == "outside":
+    if inCircP == OUTSIDE and inCircQ == OUTSIDE:
         #mid must be inside or on, otherwise we would have aborted earlier
         mid = altitudePoint(pq,m)
-        if inCircle(m,rsqr,mid) == "on":
+        if inCircle(m,rsqr,mid) == ON:
             return [mid]
         else:
             return [binaryIntersection(m,rsqr,Segment(mid,p))[1],binaryIntersection(m,rsqr,Segment(mid,q))[1]]
-    if inCircP == "inside" and inCircQ != "inside":
+    if inCircP == INSIDE and inCircQ != INSIDE:
         return [p,binaryIntersection(m,rsqr,pq)[1]]
-    if inCircQ == "inside" and inCircP != "inside":
+    if inCircQ == INSIDE and inCircP != INSIDE:
         return [binaryIntersection(m,rsqr,pq)[1],q]
-    if inCircP == "on" and inCircQ == "on":
+    if inCircP == ON and inCircQ == ON:
         return [p,q]
     onPoint = p
     outPoint = q
-    if inCircP == "outside":
+    if inCircP == OUTSIDE:
         onPoint = q
         outPoint = p
     mid = altitudePoint(Segment(onPoint,outPoint),m)
@@ -289,28 +316,28 @@ def completeOutsideIntersectionSegmentCircle(m:Point,rsqr:FieldNumber,pq:Segment
     inCircP = inCircle(m,rsqr,p)
     inCircQ = inCircle(m,rsqr,q)
     if pq.squared_length() == FieldNumber(0):
-        if inCircP == "on":
+        if inCircP == ON:
             return [p,p]
-        elif inCircP == "inside":
+        elif inCircP == INSIDE:
             return [p,p]
         else:
             return []
-    if inCircP == "inside" and inCircQ == "inside":
+    if inCircP == INSIDE and inCircQ == INSIDE:
         return [p,q]
-    if inCircP == "outside" and inCircQ == "outside":
+    if inCircP == OUTSIDE and inCircQ == OUTSIDE:
         #mid must be inside or on, otherwise we would have aborted earlier
         mid = altitudePoint(pq,m)
-        if inCircle(m,rsqr,mid) == "on":
+        if inCircle(m,rsqr,mid) == ON:
             return [mid]
         else:
             return [binaryIntersection(m,rsqr,Segment(mid,p))[1],binaryIntersection(m,rsqr,Segment(mid,q))[1]]
-    if inCircP == "inside" or inCircQ == "inside":
+    if inCircP == INSIDE or inCircQ == INSIDE:
         return [binaryIntersection(m,rsqr,pq)[1]]
-    if inCircP == "on" and inCircQ == "on":
+    if inCircP == ON and inCircQ == ON:
         return [p,q]
     onPoint = p
     outPoint = q
-    if inCircP == "outside":
+    if inCircP == OUTSIDE:
         onPoint = q
         outPoint = p
     mid = altitudePoint(Segment(onPoint,outPoint),m)
@@ -327,16 +354,16 @@ def insideIntersectionsRayCircle(m:Point,rsqr:FieldNumber,pq:Segment):
     inCircP = inCircle(m,rsqr,p)
     inCircQ = inCircle(m,rsqr,q)
 
-    if inCircP == "outside":
+    if inCircP == OUTSIDE:
         #mid must be inside or on, otherwise we would have aborted earlier
         mid = altitudePoint(pq,m)
-        if inCircle(m,rsqr,mid) == "on":
+        if inCircle(m,rsqr,mid) == ON:
             return [mid]
         else:
             return [binaryIntersectionInside(m,rsqr,Segment(mid,p))[1],binaryIntersectionInside(m,rsqr,Segment(mid,mid+mid-p))[1]]
-    if inCircP == "inside":
+    if inCircP == INSIDE:
         #copy Q to be safe
-        if inCircQ == "inside":
+        if inCircQ == INSIDE:
             diff = q-p
             if dot(diff,diff) < FieldNumber(1):
                 diff = diff.scale(FieldNumber(1)/dot(diff,diff))
@@ -348,18 +375,18 @@ def insideIntersectionsRayCircle(m:Point,rsqr:FieldNumber,pq:Segment):
         else:
             return [binaryIntersectionInside(m,rsqr,Segment(p,q))[1]]
 
-    if inCircP == "on":
+    if inCircP == ON:
         mid = altitudePoint(pq,m)
         if FieldNumber(0) >= dot(mid-p,q - p):
             return [p]
         return [p,mid+mid-p]
 
 def rayIntersectsCircle(m:Point,rsqr:FieldNumber,pq:Segment):
-    if inCircle(m,rsqr,pq.source()) != "outside":
+    if inCircle(m,rsqr,pq.source()) != OUTSIDE:
         return True
     mid = altitudePoint(pq,m)
     if FieldNumber(0) <= dot(mid-pq.source(),pq.target() - pq.source()):
-        if inCircle(m,rsqr,mid) != "outside":
+        if inCircle(m,rsqr,mid) != OUTSIDE:
             return True
     return False
 
@@ -370,31 +397,31 @@ def binaryIntersection(m:Point,rsqr:FieldNumber,pq:Segment,acc=1000):
     qQuery = inCircle(m,rsqr,q)
     inside = None
     outside = None
-    if pQuery == "on":
-        return "exact", p
-    elif pQuery == "outside":
+    if pQuery == ON:
+        return EXACT, p
+    elif pQuery == OUTSIDE:
         outside = p
     else:
         inside = p
-    if qQuery == "on":
-        return "exact", q
-    elif qQuery == "outside":
+    if qQuery == ON:
+        return EXACT, q
+    elif qQuery == OUTSIDE:
         outside = q
     else:
         inside = q
     if inside == None or outside == None:
-        return "exact",None
+        return EXACT,None
     else:
         while Segment(inside,outside).squared_length() > (FieldNumber(1)/FieldNumber(acc)):
             mid = inside.scale(FieldNumber(0.5)) + outside.scale(FieldNumber(0.5))
             midQ = inCircle(m,rsqr,mid)
-            if midQ == "on":
-                return "exact", mid
-            elif midQ == "outside":
+            if midQ == ON:
+                return EXACT, mid
+            elif midQ == OUTSIDE:
                 outside = mid
             else:
                 inside = mid
-        return "nonexact",outside
+        return NONEXACT,outside
 
 def binaryIntersectionInside(m:Point,rsqr:FieldNumber,pq:Segment,acc=1000):
     p = pq.source()
@@ -403,31 +430,31 @@ def binaryIntersectionInside(m:Point,rsqr:FieldNumber,pq:Segment,acc=1000):
     qQuery = inCircle(m,rsqr,q)
     inside = None
     outside = None
-    if pQuery == "on":
-        return "exact", p
-    elif pQuery == "outside":
+    if pQuery == ON:
+        return EXACT, p
+    elif pQuery == OUTSIDE:
         outside = p
     else:
         inside = p
-    if qQuery == "on":
-        return "exact", q
-    elif qQuery == "outside":
+    if qQuery == ON:
+        return EXACT, q
+    elif qQuery == OUTSIDE:
         outside = q
     else:
         inside = q
     if inside == None or outside == None:
-        return "exact",None
+        return EXACT,None
     else:
         while Segment(inside,outside).squared_length()  > (FieldNumber(1)/FieldNumber(acc)):
             mid = inside.scale(FieldNumber(0.5)) + outside.scale(FieldNumber(0.5))
             midQ = inCircle(m,rsqr,mid)
-            if midQ == "on":
-                return "exact", mid
-            elif midQ == "outside":
+            if midQ == ON:
+                return EXACT, mid
+            elif midQ == OUTSIDE:
                 outside = mid
             else:
                 inside = mid
-        return "nonexact",inside
+        return NONEXACT,inside
 
 def supportingRayIntersect(seg1:Segment, seg2:Segment):
     x1,y1 = seg1.source()
@@ -500,24 +527,24 @@ def findVertexCenterOfLink(points):
         b = points[(i+1)%len(points)]
         c = points[(i+2)%len(points)]
         side = onWhichSide(Segment(a,b),c)
-        if  side == "left":
+        if  side == LEFT:
             onlyRight = False
-        elif side == "right":
+        elif side == RIGHT:
             onlyLeft = False
 
     if (onlyLeft == False) and (onlyRight == False):
-        return "None",None
+        return NONE,None
     if onlyRight:
         vertexSol = _linkCanBeSolvedByVertex(list(reversed(points)))
         #soltype,sol =  findVertexCenterOfLink(list(reversed(points)))
         if vertexSol != None:
-            return "vertex", len(points) - 1 - vertexSol
-        return "None",None
+            return VERTEX, len(points) - 1 - vertexSol
+        return NONE,None
     if onlyLeft:
         vertexSol = _linkCanBeSolvedByVertex(points)
         if vertexSol != None:
-            return "vertex", vertexSol
-        return "None",None
+            return VERTEX, vertexSol
+        return NONE,None
 
 
 def findVertexCenterOfLinkConstrained(points,constraint=None):
@@ -529,29 +556,29 @@ def findVertexCenterOfLinkConstrained(points,constraint=None):
         b = points[(i + 1) % len(points)]
         c = points[(i + 2) % len(points)]
         side = onWhichSide(Segment(a, b), c)
-        if side == "left":
+        if side == LEFT:
             onlyRight = False
-        elif side == "right":
+        elif side == RIGHT:
             onlyLeft = False
 
     if (onlyLeft == False) and (onlyRight == False):
-        return "None", None
+        return NONE, None
     #if onlyRight:
     #    soltype, sol = findVertexCenterOfLinkConstrained(list(reversed(points)),[len(points)-1-constraint[0],len(points)-1-constraint[1]])
-    #    if soltype == "vertex":
-    #        return "vertex", len(points) - 1 - sol
+    #    if soltype == VERTEX:
+    #        return VERTEX, len(points) - 1 - sol
     #    else:
     #        return soltype, sol
     if onlyRight:
         vertexSol = _linkCanBeSolvedByVertex(list(reversed(points)),[len(points)-1-constraint[0],len(points)-1-constraint[1]])
         if vertexSol != None:
-            return "vertex", len(points) - 1 - vertexSol
-        return "None",None
+            return VERTEX, len(points) - 1 - vertexSol
+        return NONE,None
     if onlyLeft:
         vertexSol = _linkCanBeSolvedByVertex(points,constraint)
         if vertexSol != None:
-            return "vertex", vertexSol
-        return "None",None
+            return VERTEX, vertexSol
+        return NONE,None
 
 
 def roundExactFieldNumber(f:FieldNumber,acc=100):
@@ -712,12 +739,12 @@ def _unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
                         continue
 
                     #colinearity checks
-                    if onWhichSide(Segment(points[idx], points[idx] + orth[i]),points[(idx+1)%len(points)]) == "colinear" or onWhichSide(Segment(points[idx], points[idx] + orth[i]),points[idx-1]) == "colinear":
+                    if onWhichSide(Segment(points[idx], points[idx] + orth[i]),points[(idx+1)%len(points)]) == COLINEAR or onWhichSide(Segment(points[idx], points[idx] + orth[i]),points[idx-1]) == COLINEAR:
                         continue
 
 
                     #colinearity checks
-                    if onWhichSide(Segment(points[jdx], points[jdx] + orth[j]),points[(jdx+1)%len(points)]) == "colinear" or onWhichSide(Segment(points[jdx], points[jdx] + orth[j]),points[jdx-1]) == "colinear":
+                    if onWhichSide(Segment(points[jdx], points[jdx] + orth[j]),points[(jdx+1)%len(points)]) == COLINEAR or onWhichSide(Segment(points[jdx], points[jdx] + orth[j]),points[jdx-1]) == COLINEAR:
                         continue
 
                     inter = innerIntersect(points[idx],endofrays[i][ioff],points[jdx],endofrays[j][joff])
@@ -755,8 +782,8 @@ def _unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
 
             # colinearity checks
             if onWhichSide(Segment(p,p+o),
-                           points[(idx + 1) % len(points)]) == "colinear" or onWhichSide(
-                    Segment(points[idx], points[idx] + orth[i]), points[idx - 1]) == "colinear":
+                           points[(idx + 1) % len(points)]) == COLINEAR or onWhichSide(
+                    Segment(points[idx], points[idx] + orth[i]), points[idx - 1]) == COLINEAR:
                 continue
 
             for j in range(numpoints):
@@ -764,7 +791,7 @@ def _unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
                 m = points[j].scale(FieldNumber(0.5)) + points[(j+1)%numpoints].scale(FieldNumber(0.5))
                 rsqr = Segment(m,points[j]).squared_length()
                 inCirc = inCircle(m,rsqr,p)
-                if inCirc == "on":
+                if inCirc == ON:
                     #dont add vertices!
                     #addors.append(p)
                     #if m is in direction of o, there should be a second one
@@ -779,22 +806,22 @@ def _unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
                             addor = mid - diff
                             if Segment(p,addor).squared_length() < Segment(p,q).squared_length():
                                 addors.append(addor)
-                elif inCirc == "outside":
+                elif inCirc == OUTSIDE:
                     mid = altitudePoint(Segment(p,p+o),m)
                     secondInCirc = inCircle(m,rsqr,mid)
-                    if secondInCirc == "on":
+                    if secondInCirc == ON:
                         #if we are tangent, we have to check that we are not inserting a vertex
                         if not ( (mid == points[j]) or (mid == points[(j+1)%numpoints]) ):
                             if Segment(p,mid).squared_length() < Segment(p,q).squared_length():
                                 addors.append(mid)
-                    elif secondInCirc == "inside":
+                    elif secondInCirc == INSIDE:
                         ex,addor1 = binaryIntersection(m,rsqr,Segment(p,mid))
                         diff = addor1 - mid
                         addor2 = mid - diff
-                        if onWhichSide(Segment(points[j],points[(j+1)%numpoints]),addor1) == "left":
+                        if onWhichSide(Segment(points[j],points[(j+1)%numpoints]),addor1) == LEFT:
                             if Segment(p,addor1).squared_length() < Segment(p,q).squared_length():
                                 addors.append(addor1)
-                        if onWhichSide(Segment(points[j],points[(j+1)%numpoints]),addor2) == "left":
+                        if onWhichSide(Segment(points[j],points[(j+1)%numpoints]),addor2) == LEFT:
                             if Segment(p,addor2).squared_length() < Segment(p,q).squared_length():
                                 addors.append(addor2)
                 else:
@@ -811,7 +838,7 @@ def _unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
                             intersections.append(addor)
 
     if len(intersections) == 0:
-        return "None",None
+        return NONE,None
     else:
         #form sum of all and add to intersections as best candidate
         result = []
@@ -828,7 +855,7 @@ def _unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
                 count += 1
 
         if len(result) == 0:
-            return "inside",None
+            return INSIDE,None
 
         centroid = centroid.scale(FieldNumber(1)/FieldNumber(count))
         #keep representation simple
@@ -844,9 +871,9 @@ def _unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
             if centroid not in intersections:
                 altNum += 1
                 circleNum += 1
-                return "inside",[centroid] + result
+                return INSIDE,[centroid] + result
 
-        return "inside",result
+        return INSIDE,result
 
 def unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
 
@@ -872,14 +899,14 @@ def unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
     for i, j in trianglebases:
         diff = points[j] - points[i]
         orth = Point(zero - diff.y(), diff.x())
-        if onWhichSide(Segment(points[i], points[j]), points[i] + orth) != "left":
+        if onWhichSide(Segment(points[i], points[j]), points[i] + orth) != LEFT:
             orth = orth.scale(FieldNumber(-1))
         startRay = Segment(points[i], points[i] + orth)
         endRay = Segment(points[j], points[j] + orth)
         for offset in range(len(points)):
             qId = (j + offset) % len(points)
             nextQId = (qId + 1) % len(points)
-            if onWhichSide(endRay, points[qId]) != "left" and onWhichSide(endRay, points[nextQId]) == "left":
+            if onWhichSide(endRay, points[qId]) != LEFT and onWhichSide(endRay, points[nextQId]) == LEFT:
                 inter = supportingRayIntersectSegment(endRay, Segment(points[qId], points[nextQId]))
                 assert (inter != None)
                 rays.append(Segment(endRay.source(), inter))
@@ -891,7 +918,7 @@ def unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
         for offset in reversed(range(len(points))):
             qId = (i + offset) % len(points)
             nextQId = (qId + (len(points) - 1)) % len(points)
-            if onWhichSide(startRay, points[qId]) != "right" and onWhichSide(startRay, points[nextQId]) == "right":
+            if onWhichSide(startRay, points[qId]) != RIGHT and onWhichSide(startRay, points[nextQId]) == RIGHT:
                 inter = supportingRayIntersectSegment(startRay, Segment(points[qId], points[nextQId]))
                 assert (inter != None)
                 rays.append(Segment(startRay.source(), inter))
@@ -942,7 +969,7 @@ def unsafeOrientedFindCenterOfLink(points,num=0,axs=None):
         if isGood:
             solutions = [centroid]
     results = solutions + insidePoints
-    return "inside" if len(results) > 0 else "None", results if len(results) > 0 else None
+    return INSIDE if len(results) > 0 else NONE, results if len(results) > 0 else None
 
 def findCenterOfLink(points,num=0,axs=None):
     #get orientation
@@ -954,28 +981,28 @@ def findCenterOfLink(points,num=0,axs=None):
         b = points[(i+1)%len(points)]
         c = points[(i+2)%len(points)]
         side = onWhichSide(Segment(a,b),c)
-        if  side == "left":
+        if  side == LEFT:
             onlyRight = False
-        elif side == "right":
+        elif side == RIGHT:
             onlyLeft = False
 
     if (onlyLeft == False) and (onlyRight == False):
-        return "None",None
+        return NONE,None
     if onlyRight:
         vertexSol = _linkCanBeSolvedByVertex(list(reversed(points)))
         if vertexSol != None:
-            return "vertex", len(points) - 1 - vertexSol
+            return VERTEX, len(points) - 1 - vertexSol
 
         soltype, sol =  unsafeOrientedFindCenterOfLink(list(reversed(points)),num,axs)
-        if soltype == "vertex":
-            return "vertex",len(points)-1-sol
+        if soltype == VERTEX:
+            return VERTEX,len(points)-1-sol
         else:
             return soltype,sol
 
     if onlyLeft:
         vertexSol = _linkCanBeSolvedByVertex(points)
         if vertexSol != None:
-            return "vertex", vertexSol
+            return VERTEX, vertexSol
         return unsafeOrientedFindCenterOfLink(points,num,axs)
 
 def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num=0,axs=None):
@@ -1044,10 +1071,10 @@ def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num
         m = points[j].scale(FieldNumber(0.5)) + points[(j + 1) % numpoints].scale(FieldNumber(0.5))
         rsqr = Segment(m, points[j]).squared_length()
         inCirc = inCircle(m, rsqr, p)
-        if inCirc == "on":
+        if inCirc == ON:
             # dont add vertices!
             # addors.append(p)
-            if inCircle(m, rsqr, p + o) != "on":
+            if inCircle(m, rsqr, p + o) != ON:
                 # if m is in direction of o, there should be a second one
                 dotomp = dot(o, m - p)
                 if dotomp > FieldNumber(0):
@@ -1059,21 +1086,21 @@ def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num
                         diff = p - mid
                         if distsq(p,mid - diff) <= distsq(p,p+o):
                             addors.append(mid - diff)
-        elif inCirc == "outside":
+        elif inCirc == OUTSIDE:
             mid = altitudePoint(Segment(p, p + o), m)
             secondInCirc = inCircle(m, rsqr, mid)
-            if secondInCirc == "on":
+            if secondInCirc == ON:
                 # if we are tangent, we have to check that we are not inserting a vertex
                 if not ((mid == points[j]) or (mid == points[(j + 1) % numpoints])):
                     if distsq(p,mid) <= distsq(p,p+o):
                         addors.append(mid)
-            elif secondInCirc == "inside":
+            elif secondInCirc == INSIDE:
                 ex, addor1 = binaryIntersection(m, rsqr, Segment(p, mid))
                 diff = addor1 - mid
                 addor2 = mid - diff
-                if onWhichSide(Segment(points[j], points[(j + 1) % numpoints]), addor1) == "left":
+                if onWhichSide(Segment(points[j], points[(j + 1) % numpoints]), addor1) == LEFT:
                     addors.append(addor1)
-                if onWhichSide(Segment(points[j], points[(j + 1) % numpoints]), addor2) == "left":
+                if onWhichSide(Segment(points[j], points[(j + 1) % numpoints]), addor2) == LEFT:
                     addors.append(addor2)
         else:
             # p is in the circle already. then there is only one!
@@ -1090,7 +1117,7 @@ def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num
                 s = s / olsqr
             q = p + o.scale(s)
             # q should be guaranteed to lie outside!
-            assert (inCircle(m, rsqr, q) == "outside")
+            assert (inCircle(m, rsqr, q) == OUTSIDE)
             ex, addor = binaryIntersection(m, rsqr, Segment(p, q))
             addors.append(addor)
         for addor in addors:
@@ -1105,7 +1132,7 @@ def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num
                     intersections.append(addor)
 
     if len(intersections) == 0:
-        return "None", None
+        return NONE, None
     else:
         # form sum of all and add to intersections as best candidate
         result = []
@@ -1124,7 +1151,7 @@ def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num
                 count += 1
 
         if len(result) == 0:
-            return "None", None
+            return NONE, None
 
         centroid = centroid.scale(FieldNumber(1) / FieldNumber(count))
         centroid = roundExactOnSegment(querySegment,centroid,100)
@@ -1141,9 +1168,9 @@ def unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num
             if centroid not in intersections:
                 altNum += 1
                 circleNum += 1
-                return "inside", [centroid] + result
+                return INSIDE, [centroid] + result
 
-        return "inside", result
+        return INSIDE, result
 
 def findCenterOfLinkConstrained(points,constraintA,constraintB,num=0,axs=None):
     #get orientation
@@ -1155,25 +1182,25 @@ def findCenterOfLinkConstrained(points,constraintA,constraintB,num=0,axs=None):
         b = points[(i+1)%len(points)]
         c = points[(i+2)%len(points)]
         side = onWhichSide(Segment(a,b),c)
-        if  side == "left":
+        if  side == LEFT:
             onlyRight = False
-        elif side == "right":
+        elif side == RIGHT:
             onlyLeft = False
 
     if (onlyLeft == False) and (onlyRight == False):
-        return "None",None
+        return NONE,None
 
     if onlyRight:
         soltype,sol = unsafeOrientedFindCenterOfLinkConstrained(list(reversed(points)),len(points)-1-constraintA,len(points)-1-constraintB,num,axs)
-        if soltype == "vertex":
-            return "vertex",len(points)-1-sol
+        if soltype == VERTEX:
+            return VERTEX,len(points)-1-sol
         else:
             return soltype,sol
 
     if onlyLeft:
         vertexSol = _linkCanBeSolvedByVertex(points,[constraintA,constraintB])
         if vertexSol != None:
-            return "vertex", vertexSol
+            return VERTEX, vertexSol
         return unsafeOrientedFindCenterOfLinkConstrained(points,constraintA,constraintB,num,axs)
 
 def getParamOfPointOnSegment(seg:Segment,p:Point):
@@ -1201,12 +1228,12 @@ def circleIntersectsCircle(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc
         bigP,bigRsqr,smallP,smallRsqr = q,rqsq,p,rpsq
 
     diff = smallP - bigP
-    if inCircle(bigP,bigRsqr,bigP+diff)=="inside":
+    if inCircle(bigP,bigRsqr,bigP+diff)==INSIDE:
         if dot(diff,diff) < FieldNumber(1):
             diff = diff.scale(FieldNumber(1)/dot(diff,diff))
         if bigRsqr > FieldNumber(1):
             diff = diff.scale(bigRsqr)
-    assert(inCircle(bigP,bigRsqr,bigP+diff)!="inside")
+    assert(inCircle(bigP,bigRsqr,bigP+diff)!=INSIDE)
 
     baseSeg = outsideClipSegmentToCircle(bigP,bigRsqr,Segment(bigP,bigP+diff))
     assert(len(baseSeg) == 2)
@@ -1226,12 +1253,12 @@ def getCircleIntersections(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc
         bigP,bigRsqr,smallP,smallRsqr = q,rqsq,p,rpsq
 
     diff = smallP - bigP
-    if inCircle(bigP,bigRsqr,bigP+diff)=="inside":
+    if inCircle(bigP,bigRsqr,bigP+diff)==INSIDE:
         if dot(diff,diff) < FieldNumber(1):
             diff = diff.scale(FieldNumber(1)/dot(diff,diff))
         if bigRsqr > FieldNumber(1):
             diff = diff.scale(bigRsqr)
-    assert(inCircle(bigP,bigRsqr,bigP+diff)!="inside")
+    assert(inCircle(bigP,bigRsqr,bigP+diff)!=INSIDE)
 
     baseSeg = outsideClipSegmentToCircle(bigP,bigRsqr,Segment(bigP,bigP+diff))
     assert(len(baseSeg) == 2)
@@ -1257,7 +1284,7 @@ def getCircleIntersections(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNumber,acc
         left = seg[0]
         right = seg[1]
 
-    if inCircle(bigP, bigRsqr, left) == "inside" and inCircle(bigP, bigRsqr, right) == "inside":
+    if inCircle(bigP, bigRsqr, left) == INSIDE and inCircle(bigP, bigRsqr, right) == INSIDE:
         return []
 
     while(distsq(left,right) > (FieldNumber(1)/FieldNumber(acc))):
@@ -1297,12 +1324,12 @@ def getCircleIntersectionsOutside(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNum
         bigP,bigRsqr,smallP,smallRsqr = q,rqsq,p,rpsq
 
     diff = smallP - bigP
-    if inCircle(bigP,bigRsqr,bigP+diff)=="inside":
+    if inCircle(bigP,bigRsqr,bigP+diff)==INSIDE:
         if dot(diff,diff) < FieldNumber(1):
             diff = diff.scale(FieldNumber(1)/dot(diff,diff))
         if bigRsqr > FieldNumber(1):
             diff = diff.scale(bigRsqr)
-    assert(inCircle(bigP,bigRsqr,bigP+diff)!="inside")
+    assert(inCircle(bigP,bigRsqr,bigP+diff)!=INSIDE)
 
     baseSeg = outsideClipSegmentToCircle(bigP,bigRsqr,Segment(bigP,bigP+diff))
     assert(len(baseSeg) == 2)
@@ -1328,7 +1355,7 @@ def getCircleIntersectionsOutside(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNum
         left = seg[0]
         right = seg[1]
 
-    if inCircle(bigP, bigRsqr, left) == "inside" and inCircle(bigP, bigRsqr, right) == "inside":
+    if inCircle(bigP, bigRsqr, left) == INSIDE and inCircle(bigP, bigRsqr, right) == INSIDE:
         return []
 
     while(distsq(left,right) > (FieldNumber(1)/FieldNumber(acc))):
@@ -1346,16 +1373,16 @@ def getCircleIntersectionsOutside(p:Point,rpsq:FieldNumber,q:Point,rqsq:FieldNum
     seg1 = Segment(left+orth1,left+orth2)
     seg2 = Segment(right+orth1,right+orth2)
     for p in outsideIntersectionsSegmentCircle(bigP,bigRsqr,seg1):
-        if inCircle(smallP,smallRsqr,p) == "outside":
+        if inCircle(smallP,smallRsqr,p) == OUTSIDE:
             sols.append(p)
     for p in outsideIntersectionsSegmentCircle(smallP,smallRsqr,seg1):
-        if inCircle(bigP,bigRsqr,p) == "outside":
+        if inCircle(bigP,bigRsqr,p) == OUTSIDE:
             sols.append(p)
     for p in outsideIntersectionsSegmentCircle(bigP,bigRsqr,seg2):
-        if inCircle(smallP,smallRsqr,p) == "outside":
+        if inCircle(smallP,smallRsqr,p) == OUTSIDE:
             sols.append(p)
     for p in outsideIntersectionsSegmentCircle(smallP,smallRsqr,seg2):
-        if inCircle(bigP,bigRsqr,p) == "outside":
+        if inCircle(bigP,bigRsqr,p) == OUTSIDE:
             sols.append(p)
 
     return sols

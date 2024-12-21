@@ -1,6 +1,6 @@
 import numpy as np
 
-# some useful constants
+# some useful constants for triangulation
 outerFace = np.iinfo(int).max
 noneFace = outerFace - 1
 noneEdge = outerFace - 2
