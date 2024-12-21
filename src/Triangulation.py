@@ -4089,7 +4089,7 @@ class SolutionMerger:
             # tolerance of 2 for exploration?
             sol = qi.improve(dieAt=myBest + 1,maxRounds=50)
 
-            if tri.getNumSteiner() < myBest:
+            if tri.getNumSteiner() < myBest and len(tri.getNonSuperseededBadTris()) == 0:
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                 logging.info("found improvement!!!")
