@@ -392,9 +392,12 @@ def mergeEveryInstance():
     i = 0
     for instance in idb:
         if i != 7:
-            i += 1
             mySols.append(best[i])
+            i += 1
             continue
+        else:
+            #handcrafted solution
+            pass
 
         bestSolution = best[i]
         otherSolutions = [sol[i] for sol in solutions]
@@ -459,6 +462,8 @@ def pooledMergeWorker(index):
                 solution = None
                 for sol in ZipSolutionIterator(summary):
                     if sol.instance_uid != instance.instance_uid:
+                        continue
+                    if verify(instance,sol).num_obtuse_triangles > 0:
                         continue
                     solution = sol
                 if solution == None:
