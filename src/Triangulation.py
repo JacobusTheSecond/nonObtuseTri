@@ -4022,8 +4022,8 @@ class SolutionMerger:
 
         if len(tri.getNonSuperseededBadTris() > 0):
             logging.error(f" {self.instance.instance_uid} gave unfinished triangulation?!?!?!")
-
-
+            qi = QualityImprover(tri)
+            qi.improve()
 
         triedReplacers = set()
 
