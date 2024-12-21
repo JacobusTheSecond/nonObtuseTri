@@ -106,10 +106,6 @@ def updateSummaries():
             else:
                 i = 0
                 for solution,_ in sol:
-                    #if i == 0:
-                    #    print(len(solution.steiner_points_x))
-                    if i == 7:
-                        print(len(solution.steiner_points_x),name.name())
                     if len(solution.steiner_points_x) < len(best[i].steiner_points_x):
                         best[i] = solution
                     i += 1
