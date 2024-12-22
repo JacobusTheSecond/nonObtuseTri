@@ -1,6 +1,7 @@
 import multiprocessing
 import pickle
 import sys
+import traceback
 from multiprocessing import Pool, Lock
 import logging
 import time
@@ -381,7 +382,7 @@ def mergeEveryInstance():
     mySols = []
     i = 0
     for instance in idb:
-        if instance.instance_uid != "point-set_20_54ab0b47":
+        if instance.instance_uid != "simple-polygon-exterior_10_40642b31":
             mySols.append(best[i])
             i += 1
         else:
@@ -470,9 +471,10 @@ def pooledMergeWorker(index):
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
         bestTri = triangulationFromSolution(instance,bestSol)
         sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx,withPureRemove=True)
-    except Exception as error:
+    except BaseException as e:
         lock.acquire()
-        logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} FAILED WITH AN ERROR: {error}")
+        logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} FAILED WITH AN ERROR: {repr(e)}")
+        traceback.print_exc()
         lock.release()
     finally:
         lock.acquire()

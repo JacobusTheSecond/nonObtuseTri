@@ -1265,7 +1265,8 @@ class Triangulation:
             if id in removeSet:
                 continue
             else:
-                assert(id in self.uniqueTriangleIDs)
+                if (id not in self.uniqueTriangleIDs):
+                    assert(False)
         for _,id in addSet:
             assert(id in self.uniqueTriangleIDs)
 
@@ -1426,7 +1427,7 @@ class Triangulation:
         if self.circlesUpdatedAfterModification:
             logging.info("circle update skipped, because already up to date")
             return
-        if len(self.hitCircles) == 0:
+        if len(self.generatingCircleSet) == 0:
             self._generateGeometricCircleProblems()
         else:
             self._updateGeometricCircleProblems()
@@ -4046,9 +4047,10 @@ class SolutionMerger:
             for y in range(len(seedpoints)):
                 for kdTreeNum in range(-1 if withPureRemove else 0,len(self.kdPool)):
                     allCombs.append((x,y,kdTreeNum))
-        np.random.shuffle(allCombs)
+        #np.random.shuffle(allCombs)
 
         for xid,yid,kdTreeNum in allCombs:
+            xid,yid,kdTreeNum = 0, 2, -1
             x = seedpoints[xid]
             y = seedpoints[yid]
             diff = y-x
