@@ -4018,7 +4018,7 @@ class SolutionMerger:
             #myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
         return bestImprov
 
-    def attemptImprovementRandomAsyncPosting(self,tri:Triangulation,lock,solutions,myLoc):
+    def attemptImprovementRandomAsyncPosting(self,tri:Triangulation,lock,solutions,myLoc,withPureRemove=False):
 
         myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
 
@@ -4042,7 +4042,7 @@ class SolutionMerger:
         allCombs = []
         for x in range(len(seedpoints)):
             for y in range(len(seedpoints)):
-                for kdTreeNum in range(-1,len(self.kdPool)):
+                for kdTreeNum in range(-1 if withPureRemove else 0,len(self.kdPool)):
                     allCombs.append((x,y,kdTreeNum))
         np.random.shuffle(allCombs)
 
