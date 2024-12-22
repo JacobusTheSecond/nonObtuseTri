@@ -1110,7 +1110,7 @@ class Triangulation:
                 self.edgeTopologyChanged[triIdx, i] = False
         #np.random.shuffle(self.geometricProblems)
 
-    def getClippingSegments(self,triIdx):
+    def _getClippingSegments(self,triIdx):
 
         myCC = self.circumcenter(triIdx)
         myCR = self.circumRadiiSqr[triIdx]
