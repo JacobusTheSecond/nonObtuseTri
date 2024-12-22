@@ -1423,7 +1423,7 @@ class Triangulation:
         self._internalGeometricCircleProblems(removeSet,addSet)
 
     def _generateGeometricCircleProblems(self):
-        self._internalGeometricCircleProblems(self.generatingCircleSet,set([(id,self.uniqueTriangleIDs[id]) for id in self.validTriIdxs()]))
+        self._internalGeometricCircleProblems(copy.deepcopy(self.generatingCircleSet),set([(id,self.uniqueTriangleIDs[id]) for id in self.validTriIdxs()]))
 
     def updateGeometricCircleProblems(self):
 
@@ -4050,10 +4050,9 @@ class SolutionMerger:
             for y in range(len(seedpoints)):
                 for kdTreeNum in range(-1 if withPureRemove else 0,len(self.kdPool)):
                     allCombs.append((x,y,kdTreeNum))
-        #np.random.shuffle(allCombs)
+        np.random.shuffle(allCombs)
 
         for xid,yid,kdTreeNum in allCombs:
-            xid,yid,kdTreeNum = 0, 2, -1
             x = seedpoints[xid]
             y = seedpoints[yid]
             diff = y-x
