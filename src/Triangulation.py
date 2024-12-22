@@ -4042,7 +4042,7 @@ class SolutionMerger:
         allCombs = []
         for x in range(len(seedpoints)):
             for y in range(len(seedpoints)):
-                for kdTreeNum in range(len(self.kdPool)):
+                for kdTreeNum in range(-1,len(self.kdPool)):
                     allCombs.append((x,y,kdTreeNum))
         np.random.shuffle(allCombs)
 
@@ -4060,13 +4060,21 @@ class SolutionMerger:
                 if len(myInsidePoints)*10 > len(tri.numericVerts[self.instancesize:]):
                     continue
 
-            kdTree,triang = self.kdPool[kdTreeNum],self.triPool[kdTreeNum]
+            inside = []
+            insertSteinerpoints = []
 
-            inside = kdTree.query_ball_point(x, r)
-            if len(inside) == 0:
-                continue
-            if len(inside) >= len(myInsidePoints):
-                continue
+            if kdTreeNum >= 0:
+
+                kdTree,triang = self.kdPool[kdTreeNum],self.triPool[kdTreeNum]
+
+                inside = kdTree.query_ball_point(x, r)
+                if len(inside) == 0:
+                    continue
+                if len(inside) >= len(myInsidePoints):
+                    continue
+
+                for i in inside:
+                    insertSteinerpoints.append(triang.point(self.instancesize + i))
 
             trialID = tuple((tuple(sorted(myInsidePoints)), tuple(sorted(inside)), kdTreeNum))
             if trialID in triedReplacers:
@@ -4076,10 +4084,6 @@ class SolutionMerger:
             triedReplacers.add(trialID)
 
             removeIds = [np.where(tri.isValidVertex)[0][id + tri.instanceSize] for id in myInsidePoints]
-
-            insertSteinerpoints = []
-            for i in inside:
-                insertSteinerpoints.append(triang.point(self.instancesize + i))
 
             action = TriangulationAction(insertSteinerpoints, [-1 for _ in insertSteinerpoints], [], removeIds, False)
             state = tri.copyOfCombinatorialState()

@@ -15,7 +15,7 @@ import numpy as np
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, ZipWriter, verify, Cgshop2025Instance
 from cgshop2025_pyutils.geometry import Point, FieldNumber
 
-from solutionManagement import updateSummaries, loadBestOfSummaries
+from solutionManagement import updateSummaries, loadBestOfSummaries, triangulationFromSolution
 from Triangulation import SolutionMerger
 
 exact = True
@@ -343,17 +343,6 @@ def seededPool():
                 print("some error occured")
 
         updateSummaries()
-
-def triangulationFromSolution(instance,solution,axs=None):
-    logging.info(f"loading solution for {instance.instance_uid}...")
-    ps = []
-    for x,y in zip(solution.steiner_points_x,solution.steiner_points_y):
-        ps.append(Point(FieldNumber(x),FieldNumber(y)))
-    tr = Triangulation(instance,withGeometricUpdate=False,axs=axs,steinerpoints=ps)
-    if len(tr.getNonSuperseededBadTris()) > 0:
-        logging.error(f"{instance.instance_uid}: Triangulation has {len(tr.getNonSuperseededBadTris())} bad tris, but verify says it has {verify(instance,solution).num_obtuse_triangles}...")
-    return tr
-
 
 def mergeEveryInstance():
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)

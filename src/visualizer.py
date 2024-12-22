@@ -11,7 +11,7 @@ from pathlib import Path
 from cgshop2025_pyutils import InstanceDatabase, ZipSolutionIterator, verify, ZipWriter
 
 from hacky_internal_visualization_stuff import plot_solution
-from solutionManagement import loadSolutions
+from solutionManagement import loadSolutions, triangulationFromSolution
 
 
 def verifyAll(solname="solutions.zip"):
@@ -70,8 +70,14 @@ def updatePlot(ax1,ax2,ax3,diff,diffHeat,zippedList,idb,name,baseName):
 
     sol1 = zippedList[plot_counter][0]
     sol2 = zippedList[plot_counter][1]
-
     instance = idb[sol1.instance_uid]
+
+    #sol1.plotTriangulation()
+    #sol2.plotTriangulation()
+
+    #ax1.set_title(instance.instance_uid)
+    #return
+
     result1 = verify(instance, sol1)
     result2 = verify(instance, sol2)
     # print(f"{solution.instance_uid}: {result}")
@@ -120,6 +126,12 @@ def compareSolutions(base,others):
     name = []
     fullList = []
 
+    fig = plt.figure()
+    gs = fig.add_gridspec(nrows=2,ncols=2,height_ratios=[1,2])
+    ax1 = fig.add_subplot(gs[0,:])
+    ax2 = fig.add_subplot(gs[1,0])
+    ax3 = fig.add_subplot(gs[1,1])
+
     for base,other in zip(bestBases,bestOthers):
         #logging.info("identifying best for " + str(base[0].instance_uid))
         a = base[0]
@@ -127,10 +139,12 @@ def compareSolutions(base,others):
         #idx = np.argmin([len(o.steiner_points_x) for o in other])
         #other = b if len(b.steiner_points_x) < len(c.steiner_points_x) else c
         assert a.instance_uid == b.instance_uid
-        zippedList.append([a,b])
-        diff.append(len(a.steiner_points_x) - len(b.steiner_points_x))
+        #zippedList.append([a,b])
+        #diff.append(len(a.steiner_points_x) - len(b.steiner_points_x))
         #baseName.append(bases[baseIdx])
         #name.append(others[idx])
+        #atrig = triangulationFromSolution(idb[a.instance_uid],a,[ax2,None,None,None,None])
+        #btrig = triangulationFromSolution(idb[b.instance_uid],b,[ax3,None,None,None,None])
         fullList.append([[a,b],len(a.steiner_points_x),len(a.steiner_points_x) - len(b.steiner_points_x),str(other[1].parent.name)+"/"+str(other[1].name),str(base[1].parent.name)+"/"+str(base[1].name),idb[a.instance_uid].num_points])
 
     #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
@@ -152,12 +166,6 @@ def compareSolutions(base,others):
     diff = np.reshape(diff,(5,30))
 
     limit = len(zippedList)
-
-    fig = plt.figure()
-    gs = fig.add_gridspec(nrows=2,ncols=2,height_ratios=[1,2])
-    ax1 = fig.add_subplot(gs[0,:])
-    ax2 = fig.add_subplot(gs[1,0])
-    ax3 = fig.add_subplot(gs[1,1])
 
     def on_click(event):
         if event.inaxes==ax1:
@@ -197,6 +205,7 @@ def compareSolutions(base,others):
 
 if __name__=="__main__":
     #showSolutions()
+    logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
 
     updateSummaries()
 
@@ -225,5 +234,5 @@ if __name__=="__main__":
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    compareSolutions(others=[merged],base=[new5,new4,new3,new3Old] + allexceptnumeric)#[new1,new2,out])
+    compareSolutions(others=[merged],base=[new5,new4,new3,new3Old,new2,new1] + allexceptnumeric)#[new1,new2,out])
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
