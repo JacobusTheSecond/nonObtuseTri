@@ -381,7 +381,7 @@ def mergeEveryInstance():
     mySols = []
     i = 0
     for instance in idb:
-        if instance.instance_uid != "point-set_20_0c4009d9":
+        if instance.instance_uid != "point-set_20_54ab0b47":
             mySols.append(best[i])
             i += 1
         else:
@@ -393,7 +393,7 @@ def mergeEveryInstance():
             otherTris = [triangulationFromSolution(instance,solution) for solution in otherSolutions]
             mySols.append(bestTri.solutionParse())
             sm = SolutionMerger(instance,otherTris)
-            mySols.append(sm.attemptImprovement(bestTri,axs))
+            mySols.append(sm.attemptImprovementRandomAsyncPosting(bestTri,None,[None],0,True))
 
             i+=1
 
@@ -470,9 +470,9 @@ def pooledMergeWorker(index):
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
         bestTri = triangulationFromSolution(instance,bestSol)
         sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx,withPureRemove=True)
-    except:
+    except Exception as error:
         lock.acquire()
-        logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} FAILED WITH AN ERROR...")
+        logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} FAILED WITH AN ERROR: {error}")
         lock.release()
     finally:
         lock.acquire()

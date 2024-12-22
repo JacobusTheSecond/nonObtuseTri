@@ -4034,9 +4034,11 @@ class SolutionMerger:
         bestImprov = tri.solutionParse()
 
         #async posting
-        lock.acquire()
+        if lock != None:
+            lock.acquire()
         solutions[myLoc] = tri.solutionParse()
-        lock.release()
+        if lock != None:
+            lock.release()
 
         seedpoints = np.copy(tri.numericVerts)
         allCombs = []
@@ -4109,9 +4111,11 @@ class SolutionMerger:
                 myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
                 myBest = tri.getNumSteiner()
                 bestImprov = sol
-                lock.acquire()
+                if lock != None:
+                    lock.acquire()
                 solutions[myLoc] = tri.solutionParse()
-                lock.release()
+                if lock != None:
+                    lock.release()
                 triedReplacers.clear()
             else:
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
