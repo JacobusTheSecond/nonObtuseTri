@@ -461,7 +461,7 @@ def pooledMergeWorker(index):
         #best now has best solution, solutions holds arra of all other solutions
         lock.release()
 
-        solutions.sort(key=lambda x:len(x.steiner_point_x))
+        solutions.sort(key=lambda x:len(x.steiner_points_x))
         bestidx = 0
         bestSol = solutions[bestidx]
         solutions = solutions[:bestidx] + solutions[bestidx+1:]
