@@ -657,6 +657,7 @@ class Triangulation:
         #return np.where(self.badTris)[0]
         result = []
         for badTri in np.where(self.badTris)[0]:
+            assert(self.isValidTriangle[badTri])
             isNotSuperseeded = True
             bA = eg.badAngle(self.point(self.triangles[badTri,0]),self.point(self.triangles[badTri,1]),self.point(self.triangles[badTri,2]))
             assert bA != -1
@@ -1109,7 +1110,7 @@ class Triangulation:
                 self.edgeTopologyChanged[triIdx, i] = False
         #np.random.shuffle(self.geometricProblems)
 
-    def _getClippingSegments(self,triIdx):
+    def getClippingSegments(self,triIdx):
 
         myCC = self.circumcenter(triIdx)
         myCR = self.circumRadiiSqr[triIdx]
@@ -1266,6 +1267,7 @@ class Triangulation:
                 continue
             else:
                 if (id not in self.uniqueTriangleIDs):
+                    logging.error(f"{self.instance_uid}: {id} not in unique TriangleIDs...")
                     assert(False)
         for _,id in addSet:
             assert(id in self.uniqueTriangleIDs)
@@ -1420,14 +1422,14 @@ class Triangulation:
         self._internalGeometricCircleProblems(removeSet,addSet)
 
     def _generateGeometricCircleProblems(self):
-        self._internalGeometricCircleProblems(set(),set([(id,self.uniqueTriangleIDs[id]) for id in self.validTriIdxs()]))
+        self._internalGeometricCircleProblems(self.generatingCircleSet,set([(id,self.uniqueTriangleIDs[id]) for id in self.validTriIdxs()]))
 
     def updateGeometricCircleProblems(self):
 
         if self.circlesUpdatedAfterModification:
             logging.info("circle update skipped, because already up to date")
             return
-        if len(self.generatingCircleSet) == 0:
+        if len(self.hitCircles) == 0:
             self._generateGeometricCircleProblems()
         else:
             self._updateGeometricCircleProblems()

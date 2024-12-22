@@ -471,7 +471,7 @@ def pooledMergeWorker(index):
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
         bestTri = triangulationFromSolution(instance,bestSol)
         sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx,withPureRemove=True)
-    except BaseException as e:
+    except Exception as e:
         lock.acquire()
         logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} FAILED WITH AN ERROR: {repr(e)}")
         traceback.print_exc()
