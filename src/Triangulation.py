@@ -860,6 +860,12 @@ class Triangulation:
             state["updatedAfterModification"] = copy.deepcopy(self.circlesUpdatedAfterModification)
             state["linksUpdatedAfterModification"] = copy.deepcopy(self.linksUpdatedAfterModification)
 
+        else:
+
+            if not (self.uniqueIDManager.hasKey(rootKey)):
+                logging.error(f"rootKey is not in the IDManager... there is no rootKey to be had my guy...")
+                assert (False)
+
         return state
 
     def applyCombinatorialState(self,state):
@@ -899,6 +905,9 @@ class Triangulation:
             self.linksUpdatedAfterModification = copy.deepcopy(state["linksUpdatedAfterModification"])
 
         else:
+            if not (self.uniqueIDManager.hasKey(state["rootKey"])):
+                logging.error(f"rootKey is not in the IDManager... there is no rootKey to be had my guy...")
+                assert(False)
             self.generatingCircleSet = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["generatingCircleSet"])
             self.hitCircles = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["hitCircles"])
             self.triPairsInTree = copy.deepcopy(self.uniqueIDManager.getByKey(state["rootKey"])["triPairsInTree"])
@@ -1053,7 +1062,7 @@ class Triangulation:
                     continue
                 if not self.edgeTopologyChanged[triIdx, internal]:
                     continue
-                self.edgeTopologyChanged[triIdx, i] = False
+                self.edgeTopologyChanged[triIdx, internal] = False
                 myIds = [self.triangles[triIdx,(internal+1)%3],self.triangles[triIdx,(internal+2)%3]]
                 if myIds[0] < self.instanceSize or myIds[1] < self.instanceSize:
                     continue
@@ -3653,7 +3662,7 @@ class QualityImprover:
             times = [0,0,0,0,0,0]#combinatorial state creation, action application, list building, undo action, combinatorial state application, state eval
             counts = [0,0,0,0,0,0]
 
-        numChildren = 15//(3-depth)
+        numChildren = 10//(2-depth)
 
         result = []
         start = time.time()
@@ -3831,7 +3840,7 @@ class QualityImprover:
 
             betterEvalActionPairs = []
 
-            depth = 2
+            depth = 1
             actionList = actionList#[:numMoves + 1]
             np.random.shuffle(actionList)
             #removeList = self.buildSingleRemoveList()
@@ -4095,7 +4104,7 @@ class SolutionMerger:
             removeIds = [np.where(tri.isValidVertex)[0][id + tri.instanceSize] for id in myInsidePoints]
 
             action = TriangulationAction(insertSteinerpoints, [-1 for _ in insertSteinerpoints], [], removeIds, False)
-            state = tri.copyOfCombinatorialState()
+            tri.updateGeometricProblems()
 
             logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -4104,6 +4113,7 @@ class SolutionMerger:
             logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
             qi = QualityImprover(tri, seed=0)
+            state = qi.lazyCombinatorialState()
             qi.lazyApplyAction(action)
 
             # tolerance of 2 for exploration?
