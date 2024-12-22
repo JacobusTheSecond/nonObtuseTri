@@ -1053,6 +1053,7 @@ class Triangulation:
                     continue
                 if not self.edgeTopologyChanged[triIdx, internal]:
                     continue
+                self.edgeTopologyChanged[triIdx, i] = False
                 myIds = [self.triangles[triIdx,(internal+1)%3],self.triangles[triIdx,(internal+2)%3]]
                 if myIds[0] < self.instanceSize or myIds[1] < self.instanceSize:
                     continue
