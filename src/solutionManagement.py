@@ -3,12 +3,16 @@ import pickle
 from pathlib import Path
 
 from cgshop2025_pyutils import ZipSolutionIterator, ZipWriter, verify, InstanceDatabase
+from cgshop2025_pyutils.geometry import FieldNumber, Point
+
+from Triangulation import Triangulation
 
 
 def loadSolutions(foldername):
 
     best = []
     #first unpickle
+    logging.info(f"Loading solutions from {foldername}")
     fn = foldername.name
     summaryName = foldername.parent.parent/"solution_summaries"/(str(fn)+".zip")
     pickelName = foldername.parent.parent/"solution_summaries"/(str(fn)+".pkl")
@@ -138,4 +142,14 @@ def updateSummaries():
         logging.info("writting best summary at " + str(bestName))
         for solution in best:
             zw.add_solution(solution)
+
+def triangulationFromSolution(instance,solution,axs=None):
+    logging.info(f"loading solution for {instance.instance_uid}...")
+    ps = []
+    for x,y in zip(solution.steiner_points_x,solution.steiner_points_y):
+        ps.append(Point(FieldNumber(x),FieldNumber(y)))
+    tr = Triangulation(instance,withGeometricUpdate=False,axs=axs,steinerpoints=ps)
+    if len(tr.getNonSuperseededBadTris()) > 0:
+        logging.error(f"{instance.instance_uid}: Triangulation has {len(tr.getNonSuperseededBadTris())} bad tris, but verify says it has {verify(instance,solution).num_obtuse_triangles}...")
+    return tr
 
