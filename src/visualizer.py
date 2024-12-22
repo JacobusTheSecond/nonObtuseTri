@@ -229,6 +229,7 @@ if __name__=="__main__":
     new4 = filepath.parent.parent/"instance_solutions"/"288CircleArr2OutRNoSegs"
     new5 = filepath.parent.parent/"instance_solutions"/"withDepth1Greedy"
     merged = filepath.parent.parent/"instance_solutions"/"merged_summaries"
+    merged_bak = filepath.parent.parent/"instance_solutions"/"merged_summaries_bak"
 
     allexceptnumeric = [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
