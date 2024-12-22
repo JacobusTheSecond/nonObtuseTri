@@ -1116,6 +1116,7 @@ class Triangulation:
         myCR = self.circumRadiiSqr[triIdx]
 
         touchedTris = {triIdx}
+
         clippingSegments = []
         digest = [triIdx]
         while len(digest) > 0:
