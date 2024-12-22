@@ -394,7 +394,7 @@ def mergeEveryInstance():
             otherTris = [triangulationFromSolution(instance,solution) for solution in otherSolutions]
             mySols.append(bestTri.solutionParse())
             sm = SolutionMerger(instance,otherTris)
-            mySols.append(sm.attemptImprovementRandomAsyncPosting(bestTri,None,[None],0,True))
+            sm.attemptImprovementRandomAsyncPosting(bestTri,None,mySols,i,True)
 
             i+=1
 

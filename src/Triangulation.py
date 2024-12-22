@@ -1027,14 +1027,34 @@ class Triangulation:
         if self.linksUpdatedAfterModification:
             return
         #probably no need to recompute all, but whatever
-        self.steinerGpKeys.clear()
+        removeSet = set()
+        for key in self.steinerGpKeys:
+            removed = False
+            for k in key[1]:
+                if k not in self.reverseMap.keys():
+                    removeSet.add(key)
+                    removed = True
+                    break
+            if not removed:
+                for k in key[2]:
+                    if k not in self.reverseMap.keys():
+                        removeSet.add(key)
+                        removed = True
+                        break
+        for key in removeSet:
+            self.steinerGpKeys.remove(key)
 
         new = 0
 
         for idx in self.validVertIdxs():
             hasBad = False
             if idx < self.instanceSize:
+                self.pointTopologyChanged[idx] = False
                 continue
+            if not self.pointTopologyChanged[idx]:
+                continue
+            self.pointTopologyChanged[idx] = False
+
             localIdInside = set()
             localIdOutside = set()
             for triIdx,internal in self.vertexMap[idx]:
@@ -1059,6 +1079,7 @@ class Triangulation:
         for triIdx in self.validTriIdxs():
             for internal in range(3):
                 if self.triangleMap[triIdx,internal,0] < triIdx:
+                    self.edgeTopologyChanged[triIdx, internal] = False
                     continue
                 if not self.edgeTopologyChanged[triIdx, internal]:
                     continue

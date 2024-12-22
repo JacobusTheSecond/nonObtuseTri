@@ -36,6 +36,8 @@ challenge_instances_cgshop25/zips/cur_solutions.zip
 instance_solutions/**
 out/**
 src/__pycache__/
+solution_summaries/merged_summaries_bak.pkl
+solution_summaries/merged_summaries_bak.zip
 
 #backups
 *.bak
