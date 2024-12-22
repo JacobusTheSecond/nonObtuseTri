@@ -1051,6 +1051,8 @@ class Triangulation:
             for internal in range(3):
                 if self.triangleMap[triIdx,internal,0] < triIdx:
                     continue
+                if not self.edgeTopologyChanged[triIdx, internal]:
+                    continue
                 myIds = [self.triangles[triIdx,(internal+1)%3],self.triangles[triIdx,(internal+2)%3]]
                 if myIds[0] < self.instanceSize or myIds[1] < self.instanceSize:
                     continue
@@ -1066,8 +1068,8 @@ class Triangulation:
                         if self.triangleMap[subtriIdx, subinternal, 0] != outerFace:
                             localIdOutside.add(self.triangleMap[subtriIdx, subinternal, 0])
 
-                if not hasBad:
-                    continue
+                #if not hasBad:
+                #    continue
 
                 gpKey = self.topoBoundaryKey(tuple(sorted([self.uniqueTriangleIDs[idx] for idx in localIdInside])),
                                              tuple(sorted([self.uniqueTriangleIDs[idx] for idx in localIdOutside])))
@@ -3650,7 +3652,7 @@ class QualityImprover:
             times = [0,0,0,0,0,0]#combinatorial state creation, action application, list building, undo action, combinatorial state application, state eval
             counts = [0,0,0,0,0,0]
 
-        numChildren = 10//(2-depth)
+        numChildren = 15//(3-depth)
 
         result = []
         start = time.time()
@@ -3820,7 +3822,7 @@ class QualityImprover:
 
             #get best action
             #TODO: add early stopping up to k
-            numMoves = 10
+            numMoves = 20
             start = time.time()
             actionList = self.buildUnsafeActionList(-1,False,False)
             logging.info(f"identified {len(actionList)} actions in {time.time() - start}")
@@ -3828,7 +3830,7 @@ class QualityImprover:
 
             betterEvalActionPairs = []
 
-            depth = 1
+            depth = 2
             actionList = actionList#[:numMoves + 1]
             np.random.shuffle(actionList)
             #removeList = self.buildSingleRemoveList()
