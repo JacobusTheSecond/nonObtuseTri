@@ -457,17 +457,19 @@ def pooledMergeWorker(index):
                     solution = sol
                 if solution == None:
                     continue
-                if "best.zip" in summary.name:
-                    bestSol = solution
-                else:
-                    solutions.append(solution)
+                solutions.append(solution)
         #best now has best solution, solutions holds arra of all other solutions
         lock.release()
+
+        solutions.sort(key=lambda x:len(x.steiner_point_x))
+        bestidx = 0
+        bestSol = solutions[bestidx]
+        solutions = solutions[:bestidx] + solutions[bestidx+1:]
 
         logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished loading {len(solutions)} solutions on instanceId {instanceIdx} of name {instance.instance_uid}")
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
         bestTri = triangulationFromSolution(instance,bestSol)
-        sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx)
+        sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx,withPureRemove=True)
     except:
         lock.acquire()
         logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} FAILED WITH AN ERROR...")
