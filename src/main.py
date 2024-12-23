@@ -463,9 +463,9 @@ def pooledMergeWorker(index):
         lock.release()
 
         solutions.sort(key=lambda x:len(x.steiner_points_x))
-        bestidx = 0
+        bestidx = 3
         bestSol = solutions[bestidx]
-        solutions = solutions[:bestidx] + solutions[bestidx+1:]
+        solutions = solutions[bestidx+1:]#solutions[:bestidx] + solutions[bestidx+1:]
 
         logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished loading {len(solutions)} solutions on instanceId {instanceIdx} of name {instance.instance_uid}")
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
@@ -486,7 +486,7 @@ def pooledMergeWorker(index):
 def mergerPool():
     updateSummaries()
     numThreads = 96
-    np.set_printoptions(linewidth=4*(96//2)+3,formatter={"all":lambda x: str(x).rjust(3)})
+    np.set_printoptions(linewidth=5*(96//3)+4,formatter={"all":lambda x: str(x).rjust(3)})
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     filepath = Path(__file__)
     idb = InstanceDatabase(filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
@@ -500,6 +500,9 @@ def mergerPool():
     instanceNos = manager.list([-1 for _ in range(numThreads)])
     lock = manager.Lock()
     logging.error("staring up pool...")
+
+    filename = "merged_summaries_3"
+
     with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,None,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledMergeWorker,range(numInstances),chunksize=1)
 
@@ -527,7 +530,7 @@ def mergerPool():
             print("IMPROVEMENTS:")
             print(improvementSofar)
             print("TIMES:")
-            np.set_printoptions(linewidth=4 * (96 // 2) + 3, formatter={"all": lambda x: str(x).rjust(3)})
+            np.set_printoptions(linewidth=5 * (96 // 3) + 4, formatter={"all": lambda x: str(x).rjust(3)})
             tts = np.array(times)
             print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
             print("CURRENT ID:")
@@ -544,8 +547,8 @@ def mergerPool():
             numUpdates = 0
             lock.acquire()
             solLoc = filepath.parent.parent / "solution_summaries"
-            summaryName = solLoc / "merged_summaries.zip"
-            pickelName = solLoc / "merged_summaries.pkl"
+            summaryName = solLoc / (filename + ".zip")
+            pickelName = solLoc / (filename + ".pkl")
             try:
                 if summaryName.exists():
                     summaryName.unlink()
@@ -553,7 +556,7 @@ def mergerPool():
                 if pickelName.exists():
                     pickelName.unlink()
                 # Write the solutions to a new zip file
-                toWriteNames = [solLoc / "merged_summaries.zip" for _ in range(150)]
+                toWriteNames = [summaryName for _ in range(150)]
                 with ZipWriter(summaryName) as zw:
                     logging.info("writting sol summary at " + str(summaryName))
                     for solution in returner:
@@ -567,8 +570,8 @@ def mergerPool():
             lock.release()
 
     solLoc = filepath.parent.parent / "solution_summaries"
-    summaryName = solLoc / "merged_summaries.zip"
-    pickelName = solLoc / "merged_summaries.pkl"
+    summaryName = solLoc / (filename + ".zip")
+    pickelName = solLoc / (filename + ".pkl")
     try:
         if summaryName.exists():
             summaryName.unlink()
@@ -576,7 +579,7 @@ def mergerPool():
         if pickelName.exists():
             pickelName.unlink()
         # Write the solutions to a new zip file
-        toWriteNames = [solLoc / "merged_summaries.zip" for _ in range(150)]
+        toWriteNames = [summaryName for _ in range(150)]
         with ZipWriter(summaryName) as zw:
             logging.info("writting sol summary at " + str(summaryName))
             for solution in returner:
@@ -584,7 +587,7 @@ def mergerPool():
         with open(pickelName, "wb") as f:
             logging.info("writting name summary at " + str(pickelName))
             pickle.dump(toWriteNames, f)
-            print("succesfully wrote to file :)")
+        print("succesfully wrote to file :)")
     except:
         print("some error occured :(")
     updateSummaries()

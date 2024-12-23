@@ -236,7 +236,7 @@ if __name__=="__main__":
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    againstMergeBak = False
+    againstMergeBak = True
     if againstMergeBak:
         compareSolutions(others=[merged],base=[merged_bak])#
     else:
