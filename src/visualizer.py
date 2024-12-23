@@ -2,6 +2,7 @@ import logging
 
 import matplotlib.pyplot as plt
 import matplotlib
+from sqlalchemy.testing import against
 
 from src.solutionManagement import updateSummaries
 
@@ -235,5 +236,10 @@ if __name__=="__main__":
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    compareSolutions(others=[merged],base=[new5,new4,new3,new3Old,new2,new1] + allexceptnumeric)#[new1,new2,out])
+    againstMergeBak = False
+    if againstMergeBak:
+        compareSolutions(others=[merged],base=[merged_bak])#
+    else:
+        compareSolutions(others=[merged],base=[new5, new4, new3, new3Old, new2, new1] + allexceptnumeric)  #
+
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])

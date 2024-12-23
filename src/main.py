@@ -382,7 +382,7 @@ def mergeEveryInstance():
     mySols = []
     i = 0
     for instance in idb:
-        if instance.instance_uid != "simple-polygon-exterior_10_40642b31":
+        if i!=0:
             mySols.append(best[i])
             i += 1
         else:
