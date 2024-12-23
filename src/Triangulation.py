@@ -1456,7 +1456,7 @@ class Triangulation:
         self._internalGeometricCircleProblems(removeSet,addSet)
 
     def _generateGeometricCircleProblems(self):
-        self._internalGeometricCircleProblems(copy.deepcopy(self.generatingCircleSet),set([(id,self.uniqueTriangleIDs[id]) for id in self.validTriIdxs()]))
+        self._internalGeometricCircleProblems(copy.deepcopy(self.generatingCircleSet),set([(id,self.uniqueTriangleIDs[id]) for id in self.validTriIdxs() if self.badTris[id]]))
 
     def updateGeometricCircleProblems(self):
 
@@ -3983,7 +3983,7 @@ class SolutionMerger:
                 myInsidePoints = myKDTree.query_ball_point(x,r)
                 if len(myInsidePoints) <= 2:
                     continue
-                if len(myInsidePoints)*5 > len(tri.numericVerts[self.instancesize:]):
+                if len(myInsidePoints)*5 > tri.getNumSteiner():
                     continue
                 kdTreeNum = -1
                 for kdTree,triang in zip(self.kdPool,self.triPool):
@@ -4096,7 +4096,9 @@ class SolutionMerger:
             if len(myInsidePoints) <= 2:
                 continue
             if len(myInsidePoints) > 10:
-                if len(myInsidePoints)*10 > len(tri.numericVerts[self.instancesize:]):
+                #delete at most 10% of all steiners at once to not try tooo much. maybe this can be increased
+
+                if len(myInsidePoints)*10 > tri.getNumSteiner():
                     continue
 
             inside = []
