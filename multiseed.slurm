@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --account=ag_ifi_driemel
 #SBATCH --job-name=gigaCombiner
-#SBATCH --output=out/log
+#SBATCH --output=out/log2
 #
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=96
