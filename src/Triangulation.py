@@ -3683,7 +3683,7 @@ class QualityImprover:
             times = [0,0,0,0,0,0]#combinatorial state creation, action application, list building, undo action, combinatorial state application, state eval
             counts = [0,0,0,0,0,0]
 
-        numChildren = 10//(2-depth)
+        numChildren = 15//(3-depth)
 
         result = []
         start = time.time()
@@ -3853,7 +3853,7 @@ class QualityImprover:
 
             #get best action
             #TODO: add early stopping up to k
-            numMoves = 20
+            numMoves = 30
             start = time.time()
             actionList = self.buildUnsafeActionList(-1,False,False)
             logging.info(f"identified {len(actionList)} actions in {time.time() - start}")
@@ -3861,7 +3861,7 @@ class QualityImprover:
 
             betterEvalActionPairs = []
 
-            depth = 1
+            depth = 2
             actionList = actionList#[:numMoves + 1]
             np.random.shuffle(actionList)
             #removeList = self.buildSingleRemoveList()
@@ -4142,10 +4142,13 @@ class SolutionMerger:
             # tolerance of 2 for exploration?
             sol = qi.improve(dieAt=myBest + 1,maxRounds=50)
 
-            if tri.getNumSteiner() < myBest and len(tri.getNonSuperseededBadTris()) == 0:
+            if len(tri.getNonSuperseededBadTris()) == 0 and ((tri.getNumSteiner() < myBest) or ( tri.getNumSteiner() == myBest and np.random.random_sample() < 0.05 )):
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                logging.info("found improvement!!!")
+                if (tri.getNumSteiner() < myBest):
+                    logging.info("found improvement!!!")
+                else:
+                    logging.info("taking solution to monte carlo explore.")
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                 myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
@@ -4166,7 +4169,7 @@ class SolutionMerger:
                 tri.applyCombinatorialState(state)
             # maybe reset triangulation?
             # this resets the uniqieIDManager to conserve RAM
-            if tri.uniqueIDManager.nextId > 50000:
+            if tri.uniqueIDManager.nextId > 100000:
                 logging.info("resetting uniqueIDManager")
                 steinerpoints = [tri.point(idx) for idx in tri.validVertIdxs() if idx >= tri.instanceSize]
                 tri.__init__(self.instance, tri.withValidate, tri.seed,
