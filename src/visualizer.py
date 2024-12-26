@@ -231,6 +231,7 @@ if __name__=="__main__":
     new5 = filepath.parent.parent/"instance_solutions"/"withDepth1Greedy"
     merged = filepath.parent.parent/"instance_solutions"/"merged_summaries"
     merged_3 = filepath.parent.parent/"instance_solutions"/"merged_summaries_3"
+    merged_5 = filepath.parent.parent/"instance_solutions"/"merged_summaries_5"
     merged_bak = filepath.parent.parent/"instance_solutions"/"merged_summaries_bak"
 
     allexceptnumeric = [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]
@@ -239,8 +240,8 @@ if __name__=="__main__":
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
     againstMergeBak = True
     if againstMergeBak:
-        compareSolutions(others=[merged,merged_3],base=[merged_bak])#
+        compareSolutions(others=[merged,merged_3,merged_5],base=[merged_bak])#
     else:
-        compareSolutions(others=[merged,merged_3],base=[new5, new4, new3, new3Old, new2, new1] + allexceptnumeric)  #
+        compareSolutions(others=[merged,merged_3,merged_5],base=[new5, new4, new3, new3Old, new2, new1] + allexceptnumeric)  #
 
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
