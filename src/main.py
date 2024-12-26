@@ -463,9 +463,9 @@ def pooledMergeWorker(index):
         lock.release()
 
         solutions.sort(key=lambda x:len(x.steiner_points_x))
-        bestidx = 5
+        bestidx = 1
         bestSol = solutions[bestidx]
-        solutions = solutions[bestidx+1:]#solutions[:bestidx] + solutions[bestidx+1:]
+        solutions = solutions[:bestidx] + solutions[bestidx+1:]
 
         logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished loading {len(solutions)} solutions on instanceId {instanceIdx} of name {instance.instance_uid}")
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
@@ -486,7 +486,7 @@ def pooledMergeWorker(index):
 def mergerPool():
     updateSummaries()
     numThreads = 96
-    np.set_printoptions(linewidth=5*(96//3)+4,formatter={"all":lambda x: str(x).rjust(3)})
+    np.set_printoptions(linewidth=5*(96//3)+4,formatter={"all":lambda x: str(x).rjust(4)})
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
     filepath = Path(__file__)
     idb = InstanceDatabase(filepath.parent.parent / "challenge_instances_cgshop25" / "zips" / "challenge_instances_cgshop25_rev1.zip")
@@ -501,7 +501,7 @@ def mergerPool():
     lock = manager.Lock()
     logging.error("staring up pool...")
 
-    filename = "merged_summaries_5"
+    filename = "merged_summaries_1"
 
     with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,None,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledMergeWorker,range(numInstances),chunksize=1)
@@ -530,7 +530,7 @@ def mergerPool():
             print("IMPROVEMENTS:")
             print(improvementSofar)
             print("TIMES:")
-            np.set_printoptions(linewidth=5 * (96 // 3) + 4, formatter={"all": lambda x: str(x).rjust(3)})
+            np.set_printoptions(linewidth=5 * (96 // 3) + 4, formatter={"all": lambda x: str(x).rjust(4)})
             tts = np.array(times)
             print(np.where(tts != -1,np.array(np.full(tts.shape ,time.time()) - tts,dtype=int)//60,-1))
             print("CURRENT ID:")
@@ -546,7 +546,7 @@ def mergerPool():
             #saving:
             numUpdates = 0
             lock.acquire()
-            solLoc = filepath.parent.parent / "solution_summaries"
+            solLoc = filepath.parent.parent / "merged_summaries"
             summaryName = solLoc / (filename + ".zip")
             pickelName = solLoc / (filename + ".pkl")
             try:
@@ -569,7 +569,7 @@ def mergerPool():
                 print("some error occured :(")
             lock.release()
 
-    solLoc = filepath.parent.parent / "solution_summaries"
+    solLoc = filepath.parent.parent / "merged_summaries"
     summaryName = solLoc / (filename + ".zip")
     pickelName = solLoc / (filename + ".pkl")
     try:
