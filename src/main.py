@@ -463,7 +463,7 @@ def pooledMergeWorker(index):
         lock.release()
 
         solutions.sort(key=lambda x:len(x.steiner_points_x))
-        bestidx = 1
+        bestidx = 2
         bestSol = solutions[bestidx]
         solutions = solutions[:bestidx] + solutions[bestidx+1:]
 
@@ -501,7 +501,7 @@ def mergerPool():
     lock = manager.Lock()
     logging.error("staring up pool...")
 
-    filename = "merged_summaries_1"
+    filename = "merged_summaries_2"
 
     with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,None,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledMergeWorker,range(numInstances),chunksize=1)
