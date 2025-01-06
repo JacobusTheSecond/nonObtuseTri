@@ -14,8 +14,8 @@ def loadSolutions(foldername):
     #first unpickle
     logging.info(f"Loading solutions from {foldername}")
     fn = foldername.name
-    summaryName = foldername.parent.parent/"solution_summaries"/(str(fn)+".zip")
-    pickelName = foldername.parent.parent/"solution_summaries"/(str(fn)+".pkl")
+    summaryName = Path(__file__).parent.parent/"solution_summaries"/(str(fn)+".zip")
+    pickelName = Path(__file__).parent.parent/"solution_summaries"/(str(fn)+".pkl")
     addedSolutions = False
     if summaryName.exists():
         i = 0
@@ -33,6 +33,8 @@ def loadSolutions(foldername):
     #first build the list
     if foldername.exists():
         for solname in foldername.iterdir():
+            if ".zip" not in solname.name:
+                continue
             i = 0
             logging.info("reading "+str(solname))
             for sol in ZipSolutionIterator(solname):
