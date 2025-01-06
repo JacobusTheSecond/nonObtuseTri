@@ -66,7 +66,7 @@ def updatePlot(ax1,ax2,ax3,diff,diffHeat,zippedList,idb,name,baseName):
             if i * 30 + j == plot_counter:
                 ax1.text(j, i, diff[i, j], ha="center", va="center", color="blue", fontweight='bold')
             else:
-                if diff[i, j] != 0:
+                if diff[i, j] != "0" and diff[i, j] != 0:
                     ax1.text(j, i, diff[i, j], ha="center", va="center", color="black")
 
     sol1 = zippedList[plot_counter][0]
@@ -132,7 +132,7 @@ def compareSolutions(base,others):
     ax1 = fig.add_subplot(gs[0,:])
     ax2 = fig.add_subplot(gs[1,0])
     ax3 = fig.add_subplot(gs[1,1])
-
+    avgImprovePercent = 0
     for base,other in zip(bestBases,bestOthers):
         #logging.info("identifying best for " + str(base[0].instance_uid))
         a = base[0]
@@ -146,13 +146,27 @@ def compareSolutions(base,others):
         #name.append(others[idx])
         #atrig = triangulationFromSolution(idb[a.instance_uid],a,[ax2,None,None,None,None])
         #btrig = triangulationFromSolution(idb[b.instance_uid],b,[ax3,None,None,None,None])
-        fullList.append([[a,b],len(a.steiner_points_x),len(a.steiner_points_x) - len(b.steiner_points_x),str(other[1].parent.name)+"/"+str(other[1].name),str(base[1].parent.name)+"/"+str(base[1].name),idb[a.instance_uid].num_points])
-
+        asize = len(a.steiner_points_x)
+        bsize = len(b.steiner_points_x)
+        diff = len(a.steiner_points_x) - len(b.steiner_points_x)
+        diffText = None
+        if asize == bsize:
+            diffText = "0"
+        elif asize < bsize:
+            avgImprovePercent -= 100*((bsize/asize)-1)
+            diffText = "-"+str(int(100*((bsize/asize)-1)))+"%"
+        else:
+            avgImprovePercent += 100*(1-(bsize/asize))
+            diffText = str(int(100*(1 - (bsize/asize))))+"%"
+        fullList.append([[a,b],len(a.steiner_points_x),(diff,diffText),str(other[1].parent.name)+"/"+str(other[1].name),str(base[1].parent.name)+"/"+str(base[1].name),idb[a.instance_uid].num_points])
+    avgImprovePercent/=len(bestBases)
+    logging.info(f"average improvement in percent: {avgImprovePercent:3.1f}%")
     #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
     #fullList = sorted(fullList,key = lambda entry : entry[5])
     zippedList = [e[0] for e in fullList]
     base = [e[1] for e in fullList]
-    diff = [e[2] for e in fullList]
+    diff = [e[2][0] for e in fullList]
+    diffTexts = [e[2][1] for e in fullList]
     name = [e[3] for e in fullList]
     baseName = [e[4] for e  in fullList]
 
@@ -165,6 +179,11 @@ def compareSolutions(base,others):
     diffheat = np.reshape(diffheat,(5,30))
 
     diff = np.reshape(diff,(5,30))
+    percentage = False
+    if percentage:
+        diffTexts = np.reshape(diffTexts,(5,30))
+    else:
+        diffTexts = diff
 
     limit = len(zippedList)
 
@@ -173,7 +192,7 @@ def compareSolutions(base,others):
             global plot_counter
             plot_counter = 30 * (min(max(0,int(event.ydata+0.5)),4)) + min(max(0,int(event.xdata+0.5)),29)
             plot_counter = min(max(0,plot_counter),149)
-            updatePlot(ax1, ax2, ax3, diff, diffheat, zippedList, idb, name, baseName)
+            updatePlot(ax1, ax2, ax3, diffTexts, diffheat, zippedList, idb, name, baseName)
             plt.draw()
 
     def on_press(event):
@@ -191,7 +210,7 @@ def compareSolutions(base,others):
         if event.key == 'up':
             plot_counter = max(plot_counter-30,0)
 
-        updatePlot(ax1, ax2, ax3, diff, diffheat, zippedList, idb, name, baseName)
+        updatePlot(ax1, ax2, ax3, diffTexts, diffheat, zippedList, idb, name, baseName)
         plt.draw()
 
 
@@ -199,7 +218,7 @@ def compareSolutions(base,others):
     fig.canvas.mpl_connect('key_press_event',on_press)
     fig.canvas.mpl_connect('button_press_event', on_click)
 
-    updatePlot(ax1,ax2,ax3,diff,diffheat,zippedList,idb,name,baseName)
+    updatePlot(ax1,ax2,ax3,diffTexts,diffheat,zippedList,idb,name,baseName)
 
     plt.show()
 
@@ -233,6 +252,7 @@ if __name__=="__main__":
     merged_3 = filepath.parent.parent/"instance_solutions"/"merged_summaries_3"
     merged_5 = filepath.parent.parent/"instance_solutions"/"merged_summaries_5"
     merged_bak = filepath.parent.parent/"instance_solutions"/"merged_summaries_bak"
+    mergemerge = filepath.parent.parent/"out_merged_summaries"
 
     allexceptnumeric = [exact_solutions,new,seeded,seededEndFace,seededFace,withFace,withComplicatedCenter,output,gigaSeeded,withConstrainedVoronoi]
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
@@ -240,8 +260,9 @@ if __name__=="__main__":
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
     againstMergeBak = False
     if againstMergeBak:
-        compareSolutions(others=[merged,merged_3,merged_5],base=[merged_bak])#
+        compareSolutions(others=[mergemerge],base=[merged,merged_3,merged_5])#
     else:
-        compareSolutions(others=[merged,merged_3,merged_5],base=[new5, new4, new3, new3Old, new2, new1] + allexceptnumeric)  #
+        compareSolutions(others=[merged,merged_3,merged_5,mergemerge],base=[new5, new4, new3, new3Old, new2, new1] + allexceptnumeric)  #
+        #compareSolutions(others=[new5, new4, new3, new3Old],base= allexceptnumeric)  #
 
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])

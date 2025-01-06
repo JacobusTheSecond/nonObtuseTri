@@ -110,26 +110,8 @@ def solveEveryInstance(solname="cur_solution.zip"):
 
     verifyAll(solname)
 
-class DataBase:
-    def __init__(self,num):
-        self.data = [[] for i in range(num)]
-
-
-    def append(self,index,datum):
-        self.data[index].append(datum)
-
-    def printSizes(self):
-        sizes = [[] for i in range(len(self.data))]
-        for i in range(len(self.data)):
-            for j in self.data[i]:
-                sizes[i].append(len(j.steiner_points_x))
-        return str(sizes)
-
-    def is_full(self):
-        if np.all(np.array([len(i) for i in self.data]) == 150):
-            return True
-        else:
-            return False
+globalNum = 0
+globalPQ = False
 
 def workerFunction(index):
     filepath = Path(__file__)
@@ -418,31 +400,28 @@ def mergeEveryInstance():
         pickle.dump(toWriteNames, f)
 
 def pooledMergeWorker(index):
-    lock.acquire()
-    logging.error(f"started thread {multiprocessing.current_process()}")
-    lock.release()
+    with lock:
+        logging.error(f"started thread {multiprocessing.current_process()}")
 
     instanceIdx = index % numInstances
     instance = instanceList[instanceIdx]
-    lock.acquire()
 
-    myIdx = -1
-    for cIdx in range(len(currentInstance)):
-        if currentInstance[cIdx] == -1:
-            myIdx = cIdx
-            break
-    assert(myIdx != -1)
+    with lock:
+        myIdx = -1
+        for cIdx in range(len(currentInstance)):
+            if currentInstance[cIdx] == -1:
+                myIdx = cIdx
+                break
+        assert(myIdx != -1)
 
-    logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid}")
+        logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid}")
 
-    times[myIdx] = time.time()
-    currentInstance[myIdx] = instanceIdx
-    lock.release()
+        times[myIdx] = time.time()
+        currentInstance[myIdx] = instanceIdx
+
     sol = None
     try:
 
-        #lock.acquire()
-        #load solutions
         filepath = Path(__file__)
         summaryFolder = filepath.parent.parent / "solution_summaries"
         solutions = []
@@ -459,29 +438,25 @@ def pooledMergeWorker(index):
                 if solution == None:
                     continue
                 solutions.append(solution)
-        #best now has best solution, solutions holds arra of all other solutions
-        #lock.release()
 
         solutions.sort(key=lambda x:len(x.steiner_points_x))
-        bestidx = 2
+        bestidx = globalNum
         bestSol = solutions[bestidx]
         solutions = solutions[:bestidx] + solutions[bestidx+1:]
 
         logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished loading {len(solutions)} solutions on instanceId {instanceIdx} of name {instance.instance_uid}")
         sm = SolutionMerger(instance,[triangulationFromSolution(instance,solution) for solution in solutions])
         bestTri = triangulationFromSolution(instance,bestSol)
-        sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx,withPureRemove=True)
+        sm.attemptImprovementRandomAsyncPosting(bestTri,lock,returner,instanceIdx,withPureRemove=True,withPQ=globalPQ)
     except Exception as e:
-        lock.acquire()
-        logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} FAILED WITH AN ERROR: {repr(e)}")
-        traceback.print_exc()
-        lock.release()
+        with lock:
+            logging.error(f"{multiprocessing.current_process()} ({myIdx}): working on instanceId {instanceIdx} of name {instance.instance_uid} FAILED WITH AN ERROR: {repr(e)}")
+            traceback.print_exc()
     finally:
-        lock.acquire()
-        times[myIdx] = -1
-        currentInstance[myIdx] = -1
-        logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished instanceId {instanceIdx} of name {instance.instance_uid} with {len(bestTri.getNonSuperseededBadTris())} bad tris.")
-        lock.release()
+        with lock:
+            times[myIdx] = -1
+            currentInstance[myIdx] = -1
+            logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished instanceId {instanceIdx} of name {instance.instance_uid} with {len(bestTri.getNonSuperseededBadTris())} bad tris.")
 
 def mergerPool():
     updateSummaries()
@@ -501,7 +476,7 @@ def mergerPool():
     lock = manager.Lock()
     logging.error("staring up pool...")
 
-    filename = "merged_summaries_2"
+    filename = f"merged_summaries_{globalPQ}_{globalNum}"
 
     with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,None,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledMergeWorker,range(numInstances),chunksize=1)
@@ -597,9 +572,13 @@ def mergerPool():
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--parallel",type=bool,default=False)
+    parser.add_argument("--pq",type=bool,default=False)
+    parser.add_argument("--num",type=int,default=0)
     args = parser.parse_args()
     if args.parallel:
         #seededPool()
+        globalNum = args.num
+        globalPQ = args.pq
         mergerPool()
     else:
 

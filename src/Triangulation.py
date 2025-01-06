@@ -1,6 +1,7 @@
 import copy
 import itertools
 import time
+import traceback
 
 import numpy as np
 import matplotlib.ticker
@@ -299,6 +300,8 @@ class Triangulation:
         if withGeometricUpdate:
             self.updateGeometricProblems()
             self.circlesUpdatedAfterModification = True
+
+        self.uniqueIDManager.addKeyObjectPair(self.triangulationKey(), self.copyOfCombinatorialState())
 
     ####
     # unique ID handling stuff for geometric problem restoration
@@ -3597,7 +3600,8 @@ class QualityImprover:
         removedUnique = set()
         for r in action.removedPointIds:
             if (r >= len(self.tri.isValidVertex)) or (not self.tri.isValidVertex[r]):
-                logging.error(f"vertex {r} is not in the triangulation?!?!?")
+                logging.error(f"{self.tri.instance_uid}: vertex {r} is not in the triangulation?!?!?")
+                traceback.print_exc()
                 continue
             resultingKey.remove(self.tri.uniquePointIDs[r])
             removedUnique.add(self.tri.uniquePointIDs[r])
@@ -3917,7 +3921,7 @@ class QualityImprover:
             elif terminal:
                 logging.info("terminal action applied")
             else:
-                logging.info("failed to add action...")
+                logging.error("failed to add action...")
             #print(self.tri.watch)
             self.tri.watch=0
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
@@ -3953,6 +3957,64 @@ class QualityImprover:
         #if len(self.tri.getNonSuperseededBadTris()) > 0:
         #    logging.error("failed to output a valid triangulation...")
         return self.tri.solutionParse()
+
+    def improvePQ(self,maxExpansions = None,dieAt = None):
+        priorityQueue = [(self.eval(),self.tri.triangulationKey())]
+        alreadyExplored = {self.tri.triangulationKey()}
+
+        iteration = 0
+        keepGoing = True
+
+        while keepGoing:
+            logging.info(f"first few evals: {[v for v,_ in priorityQueue[:10]]}")
+            iteration += 1
+
+            if maxExpansions is not None and iteration > maxExpansions:
+                return self.tri.solutionParse()
+
+            if len(priorityQueue) == 0:
+                return self.tri.solutionParse()
+
+            _,key = priorityQueue.pop(0)
+            rootState = self.tri.uniqueIDManager.getByKey(key)
+
+            self.tri.applyCombinatorialState(rootState)
+            self.tri.plotTriangulation()
+            if len(self.tri.getNonSuperseededBadTris()) == 0:
+                return self.tri.solutionParse()
+
+            if dieAt is not None and self.tri.getNumSteiner() > dieAt:
+                return self.tri.solutionParse()
+
+            #step one of expansion: update geometric problems and post them to the uniqueIDManager
+            self.tri.updateGeometricProblems()
+
+            assert(self.tri.uniqueIDManager.hasKey(key) and key == self.tri.triangulationKey())
+            self.tri.uniqueIDManager.overwriteValueOfKey(self.tri.triangulationKey(),self.tri.copyOfCombinatorialState())
+
+            rootState = self.tri.uniqueIDManager.getByKey(key)
+
+            numMoves = 50
+            actionList = self.buildUnsafeActionList(-1,False,False)
+            np.random.shuffle(actionList)
+            #shuffle?
+            actionList = actionList[:numMoves]
+
+            #step two: add numMoves children to PQ
+            for _,action,_ in actionList:
+                changed,_,_ = self.lazyApplyAction(action,False)
+                if not changed:
+                    continue
+                newKey = self.tri.triangulationKey()
+                if newKey not in alreadyExplored:
+                    priorityQueue.append((self.eval(),newKey))
+                    alreadyExplored.add(newKey)
+                self.tri.applyCombinatorialState(rootState)
+            priorityQueue.sort(key=lambda x: x[0])
+        return self.tri.solutionParse()
+
+
+
 
 class SolutionMerger:
     def __init__(self, instance,triPool):
@@ -4055,7 +4117,7 @@ class SolutionMerger:
             #myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
         return bestImprov
 
-    def attemptImprovementRandomAsyncPosting(self,tri:Triangulation,lock,solutions,myLoc,withPureRemove=False):
+    def attemptImprovementRandomAsyncPosting(self,tri:Triangulation,lock,solutions,myLoc,withPureRemove=False,withPQ=False):
 
         myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
 
@@ -4071,11 +4133,11 @@ class SolutionMerger:
         bestImprov = tri.solutionParse()
 
         #async posting
-        if lock != None:
-            lock.acquire()
-        solutions[myLoc] = tri.solutionParse()
-        if lock != None:
-            lock.release()
+        if lock is not None:
+            with lock:
+                solutions[myLoc] = tri.solutionParse()
+        else:
+            solutions[myLoc] = tri.solutionParse()
 
         seedpoints = np.copy(tri.numericVerts)
         allCombs = []
@@ -4140,7 +4202,7 @@ class SolutionMerger:
             qi.lazyApplyAction(action)
 
             # tolerance of 2 for exploration?
-            sol = qi.improve(dieAt=myBest + 1,maxRounds=50)
+            sol = qi.improvePQ(1000) if withPQ else qi.improve(dieAt=myBest + 1,maxRounds=50)
 
             if len(tri.getNonSuperseededBadTris()) == 0 and ((tri.getNumSteiner() < myBest) or ( tri.getNumSteiner() == myBest and np.random.random_sample() < 0.05 )):
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -4154,11 +4216,12 @@ class SolutionMerger:
                 myKDTree = KDTree(tri.numericVerts[[idx for idx in tri.validVertIdxs() if idx >= tri.instanceSize]])
                 myBest = tri.getNumSteiner()
                 bestImprov = sol
-                if lock != None:
-                    lock.acquire()
-                solutions[myLoc] = tri.solutionParse()
-                if lock != None:
-                    lock.release()
+                if tri.getNumSteiner() < myBest:
+                    if lock is not None:
+                        with lock:
+                            solutions[myLoc] = tri.solutionParse()
+                    else:
+                        solutions[myLoc] = tri.solutionParse()
                 triedReplacers.clear()
             else:
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
