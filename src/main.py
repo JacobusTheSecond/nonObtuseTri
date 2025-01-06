@@ -401,7 +401,7 @@ def mergeEveryInstance():
 
 def pooledMergeWorker(index):
     with lock:
-        logging.error(f"started thread {multiprocessing.current_process()}")
+        logging.error(f"started thread {multiprocessing.current_process()} with {globalPQ} and {globalNum}")
 
     instanceIdx = index % numInstances
     instance = instanceList[instanceIdx]
@@ -474,7 +474,7 @@ def mergerPool():
     times = manager.list([-1 for _ in range(numThreads)])
     instanceNos = manager.list([-1 for _ in range(numThreads)])
     lock = manager.Lock()
-    logging.error("staring up pool...")
+    logging.error(f"staring up pool with {globalPQ} and {globalNum}")
 
     filename = f"merged_summaries_{globalPQ}_{globalNum}"
 
