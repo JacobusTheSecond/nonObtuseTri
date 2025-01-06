@@ -14,4 +14,4 @@ module load Anaconda3
 source /home/${USER}/.bashrc
 source activate nonobtuse
 
-srun --unbuffered python src/main.py --parallel=True --pq=False --num=0
+srun --unbuffered python src/main.py --parallel=True --queue=False --num=0
