@@ -571,8 +571,8 @@ def mergerPool():
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--parallel",type=bool,default=False)
-    parser.add_argument("--queue",type=bool,default=False)
+    parser.add_argument("--parallel",default=False,action=argparse.BooleanOptionalAction)
+    parser.add_argument("--queue",default=False,action=argparse.BooleanOptionalAction)
     parser.add_argument("--num",type=int,default=0)
     args = parser.parse_args()
     if args.parallel:
