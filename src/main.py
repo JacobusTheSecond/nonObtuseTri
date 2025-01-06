@@ -572,13 +572,13 @@ def mergerPool():
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--parallel",type=bool,default=False)
-    parser.add_argument("--pq",type=bool,default=False)
+    parser.add_argument("--queue",type=bool,default=False)
     parser.add_argument("--num",type=int,default=0)
     args = parser.parse_args()
     if args.parallel:
         #seededPool()
         globalNum = args.num
-        globalPQ = args.pq
+        globalPQ = args.queue
         mergerPool()
     else:
 
