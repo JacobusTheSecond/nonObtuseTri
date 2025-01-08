@@ -459,7 +459,7 @@ def pooledMergeWorker(index):
             logging.error(f"{multiprocessing.current_process()} ({myIdx}): finished instanceId {instanceIdx} of name {instance.instance_uid} with {len(bestTri.getNonSuperseededBadTris())} bad tris.")
 
 def mergerPool():
-    updateSummaries()
+    #updateSummaries()
     numThreads = 96
     np.set_printoptions(linewidth=5*(96//3)+4,formatter={"all":lambda x: str(x).rjust(4)})
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.ERROR)
@@ -476,7 +476,7 @@ def mergerPool():
     lock = manager.Lock()
     logging.error(f"staring up pool with {globalPQ} and {globalNum}")
 
-    filename = f"merged_summaries_{globalPQ}_{globalNum}"
+    filename = f"merged_summaries_big_{globalPQ}_{globalNum}"
 
     with Pool(initializer=init_real_pool_processes,initargs=(lock,returner,None,best,times,instanceNos,numInstances,[ins for ins in idb])) as pool:
         result = pool.map_async(pooledMergeWorker,range(numInstances),chunksize=1)
@@ -539,7 +539,7 @@ def mergerPool():
                 with open(pickelName, "wb") as f:
                     logging.info("writting name summary at " + str(pickelName))
                     pickle.dump(toWriteNames, f)
-                print("succesfully wrote to file :)")
+                print(f"succesfully wrote to file {filename}")
             except:
                 print("some error occured :(")
             lock.release()
@@ -562,7 +562,7 @@ def mergerPool():
         with open(pickelName, "wb") as f:
             logging.info("writting name summary at " + str(pickelName))
             pickle.dump(toWriteNames, f)
-        print("succesfully wrote to file :)")
+        print(f"succesfully wrote to file {filename}")
     except:
         print("some error occured :(")
     updateSummaries()
