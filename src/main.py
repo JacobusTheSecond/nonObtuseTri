@@ -376,7 +376,7 @@ def mergeEveryInstance():
             otherTris = [triangulationFromSolution(instance,solution) for solution in otherSolutions]
             mySols.append(bestTri.solutionParse())
             sm = SolutionMerger(instance,otherTris)
-            sm.attemptImprovementRandomAsyncPosting(bestTri,None,mySols,i,True)
+            sm.attemptImprovementRandomAsyncPosting(bestTri,None,mySols,i,True,withPQ=globalPQ)
 
             i+=1
 
@@ -575,10 +575,10 @@ if __name__=="__main__":
     parser.add_argument("--queue",default=False,action=argparse.BooleanOptionalAction)
     parser.add_argument("--num",type=int,default=0)
     args = parser.parse_args()
+    globalNum = args.num
+    globalPQ = args.queue
     if args.parallel:
         #seededPool()
-        globalNum = args.num
-        globalPQ = args.queue
         mergerPool()
     else:
 

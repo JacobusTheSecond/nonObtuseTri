@@ -59,8 +59,8 @@ def updatePlot(ax1,ax2,ax3,diff,diffHeat,zippedList,idb,name,baseName):
     ax3.clear()
     global plot_counter
     extremum = max(abs(np.max(diffHeat)),abs(np.min(diffHeat)))
-
-    ax1.imshow(diffHeat, cmap='PiYG', interpolation='nearest', vmin=-extremum, vmax=extremum)
+    gain = 0.85
+    ax1.imshow(diffHeat, cmap='PiYG', interpolation='nearest', norm=matplotlib.colors.SymLogNorm(linthresh=0.5,linscale=1,vmin=-gain*extremum,vmax=gain*extremum,base=2))
     for i in range(len(diff)):
         for j in range(len(diff[i])):
             if i * 30 + j == plot_counter:
@@ -161,7 +161,7 @@ def compareSolutions(base,others):
         fullList.append([[a,b],len(a.steiner_points_x),(diff,diffText),str(other[1].parent.name)+"/"+str(other[1].name),str(base[1].parent.name)+"/"+str(base[1].name),idb[a.instance_uid].num_points])
     avgImprovePercent/=len(bestBases)
     logging.info(f"average improvement in percent: {avgImprovePercent:3.1f}%")
-    #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
+    fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
     #fullList = sorted(fullList,key = lambda entry : entry[5])
     zippedList = [e[0] for e in fullList]
     base = [e[1] for e in fullList]
@@ -179,7 +179,7 @@ def compareSolutions(base,others):
     diffheat = np.reshape(diffheat,(5,30))
 
     diff = np.reshape(diff,(5,30))
-    percentage = False
+    percentage = True
     if percentage:
         diffTexts = np.reshape(diffTexts,(5,30))
     else:
