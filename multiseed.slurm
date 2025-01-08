@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --account=ag_ifi_driemel
 #SBATCH --job-name=gigaCombiner
-#SBATCH --output=out/log_False_0
+#SBATCH --output=out/log_True_0
 #
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=96
@@ -14,4 +14,4 @@ module load Anaconda3
 source /home/${USER}/.bashrc
 source activate nonobtuse
 
-srun --unbuffered python src/main.py --parallel True  --queue False --num 0
+srun --unbuffered python src/main.py --parallel --queue --num=0
