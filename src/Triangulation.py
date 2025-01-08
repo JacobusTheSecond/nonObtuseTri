@@ -3687,7 +3687,7 @@ class QualityImprover:
             times = [0,0,0,0,0,0]#combinatorial state creation, action application, list building, undo action, combinatorial state application, state eval
             counts = [0,0,0,0,0,0]
 
-        numChildren = 15//(3-depth)
+        numChildren = 15//(3-depth) if depth < 3 else 20
 
         result = []
         start = time.time()
@@ -3782,7 +3782,7 @@ class QualityImprover:
         logging.info(" "*(10-(3*depth))+str(result))
         return result
 
-    def improve(self,circlepatch = None,dieAt = None,maxRounds=None):
+    def improve(self,circlepatch = None,dieAt = None,maxRounds=None,maxDepth=2):
 
         #TODO list:
         # - geometric problems should be hashed by inside AND outside, not just inside. maybe even the parameters of the solver?
@@ -3865,7 +3865,7 @@ class QualityImprover:
 
             betterEvalActionPairs = []
 
-            depth = 2
+            depth = maxDepth
             actionList = actionList#[:numMoves + 1]
             np.random.shuffle(actionList)
             #removeList = self.buildSingleRemoveList()
@@ -3975,41 +3975,47 @@ class QualityImprover:
             if len(priorityQueue) == 0:
                 return self.tri.solutionParse()
 
-            _,key = priorityQueue.pop(0)
-            rootState = self.tri.uniqueIDManager.getByKey(key)
+            for i in range(10):
 
-            self.tri.applyCombinatorialState(rootState)
-            self.tri.plotTriangulation()
-            if len(self.tri.getNonSuperseededBadTris()) == 0:
-                return self.tri.solutionParse()
+                if len(priorityQueue) == 0:
+                    break
 
-            if dieAt is not None and self.tri.getNumSteiner() > dieAt:
-                return self.tri.solutionParse()
+                _,key = priorityQueue.pop(0)
+                rootState = self.tri.uniqueIDManager.getByKey(key)
 
-            #step one of expansion: update geometric problems and post them to the uniqueIDManager
-            self.tri.updateGeometricProblems()
-
-            assert(self.tri.uniqueIDManager.hasKey(key) and key == self.tri.triangulationKey())
-            self.tri.uniqueIDManager.overwriteValueOfKey(self.tri.triangulationKey(),self.tri.copyOfCombinatorialState())
-
-            rootState = self.tri.uniqueIDManager.getByKey(key)
-
-            numMoves = 50
-            actionList = self.buildUnsafeActionList(-1,False,False)
-            np.random.shuffle(actionList)
-            #shuffle?
-            actionList = actionList[:numMoves]
-
-            #step two: add numMoves children to PQ
-            for _,action,_ in actionList:
-                changed,_,_ = self.lazyApplyAction(action,False)
-                if not changed:
-                    continue
-                newKey = self.tri.triangulationKey()
-                if newKey not in alreadyExplored:
-                    priorityQueue.append((self.eval(),newKey))
-                    alreadyExplored.add(newKey)
                 self.tri.applyCombinatorialState(rootState)
+                self.tri.plotTriangulation()
+                if i == 0:
+                    if len(self.tri.getNonSuperseededBadTris()) == 0:
+                        return self.tri.solutionParse()
+
+                    if dieAt is not None and self.tri.getNumSteiner() > dieAt:
+                        return self.tri.solutionParse()
+
+                #step one of expansion: update geometric problems and post them to the uniqueIDManager
+                self.tri.updateGeometricProblems()
+
+                assert(self.tri.uniqueIDManager.hasKey(key) and key == self.tri.triangulationKey())
+                self.tri.uniqueIDManager.overwriteValueOfKey(self.tri.triangulationKey(),self.tri.copyOfCombinatorialState())
+
+                rootState = self.tri.uniqueIDManager.getByKey(key)
+
+                numMoves = 50
+                actionList = self.buildUnsafeActionList(-1,False,False)
+                np.random.shuffle(actionList)
+                #shuffle?
+                actionList = actionList[:numMoves]
+
+                #step two: add numMoves children to PQ
+                for _,action,_ in actionList:
+                    changed,_,_ = self.lazyApplyAction(action,False)
+                    if not changed:
+                        continue
+                    newKey = self.tri.triangulationKey()
+                    if newKey not in alreadyExplored:
+                        priorityQueue.append((self.eval(),newKey))
+                        alreadyExplored.add(newKey)
+                    self.tri.applyCombinatorialState(rootState)
             priorityQueue.sort(key=lambda x: x[0])
         return self.tri.solutionParse()
 
@@ -4157,10 +4163,10 @@ class SolutionMerger:
             #too few or too many points of my solution inside
             if len(myInsidePoints) <= 2:
                 continue
-            if len(myInsidePoints) > 10:
+            if len(myInsidePoints) > 15:
                 #delete at most 10% of all steiners at once to not try tooo much. maybe this can be increased
 
-                if len(myInsidePoints)*10 > tri.getNumSteiner():
+                if len(myInsidePoints)*3 > tri.getNumSteiner():
                     continue
 
             inside = []
@@ -4202,7 +4208,7 @@ class SolutionMerger:
             qi.lazyApplyAction(action)
 
             # tolerance of 2 for exploration?
-            sol = qi.improvePQ(1000) if withPQ else qi.improve(dieAt=myBest + 1,maxRounds=50)
+            sol = qi.improvePQ(200) if withPQ else qi.improve(dieAt=myBest + 1,maxRounds=50,maxDepth = 2 if tri.instanceSize>50 else 3)
 
             if len(tri.getNonSuperseededBadTris()) == 0 and ((tri.getNumSteiner() < myBest) or ( tri.getNumSteiner() == myBest and np.random.random_sample() < 0.05 )):
                 logging.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
