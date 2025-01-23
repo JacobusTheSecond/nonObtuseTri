@@ -3601,7 +3601,6 @@ class QualityImprover:
         for r in action.removedPointIds:
             if (r >= len(self.tri.isValidVertex)) or (not self.tri.isValidVertex[r]):
                 logging.error(f"{self.tri.instance_uid}: vertex {r} is not in the triangulation?!?!?")
-                traceback.print_exc()
                 continue
             resultingKey.remove(self.tri.uniquePointIDs[r])
             removedUnique.add(self.tri.uniquePointIDs[r])
@@ -3980,7 +3979,7 @@ class QualityImprover:
                 if len(priorityQueue) == 0:
                     break
 
-                _,key = priorityQueue.pop(0)
+                ev,key = priorityQueue.pop(0)
                 rootState = self.tri.uniqueIDManager.getByKey(key)
 
                 self.tri.applyCombinatorialState(rootState)
@@ -3991,6 +3990,10 @@ class QualityImprover:
 
                     if dieAt is not None and self.tri.getNumSteiner() > dieAt:
                         return self.tri.solutionParse()
+                else:
+                    if len(self.tri.getNonSuperseededBadTris()) == 0:
+                        priorityQueue.append((ev,key))
+                        break
 
                 #step one of expansion: update geometric problems and post them to the uniqueIDManager
                 self.tri.updateGeometricProblems()
@@ -4140,8 +4143,9 @@ class SolutionMerger:
 
         #async posting
         if lock is not None:
-            with lock:
-                solutions[myLoc] = tri.solutionParse()
+            lock.acquire()
+            solutions[myLoc] = tri.solutionParse()
+            lock.release()
         else:
             solutions[myLoc] = tri.solutionParse()
 
@@ -4224,8 +4228,9 @@ class SolutionMerger:
                 bestImprov = sol
                 if tri.getNumSteiner() < myBest:
                     if lock is not None:
-                        with lock:
-                            solutions[myLoc] = tri.solutionParse()
+                        lock.acquire()
+                        solutions[myLoc] = tri.solutionParse()
+                        lock.release()
                     else:
                         solutions[myLoc] = tri.solutionParse()
                 triedReplacers.clear()

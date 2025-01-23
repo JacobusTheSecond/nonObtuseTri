@@ -258,11 +258,11 @@ if __name__=="__main__":
         #allexceptnumeric = allexceptnumeric + [v for v in list.iterdir()]
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
-    againstMergeBak = False
+    againstMergeBak = True
     if againstMergeBak:
         compareSolutions(others=[mergemerge],base=[merged,merged_3,merged_5])#
     else:
-        compareSolutions(others=[merged,merged_3,merged_5,mergemerge],base=[new5, new4, new3, new3Old, new2, new1] + allexceptnumeric)  #
+        compareSolutions(others=[merged,merged_3,merged_5,mergemerge],base=[numeric_solutions])  #
         #compareSolutions(others=[new5, new4, new3, new3Old],base= allexceptnumeric)  #
 
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])
