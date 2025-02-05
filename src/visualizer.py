@@ -349,7 +349,7 @@ def compareSolutions(base,others):
     avgImprovePercent/=len(bestBases)
     logging.info(f"average improvement in percent: {avgImprovePercent:3.1f}%")
     #fullList = sorted(fullList,key = lambda entry : str(entry[0][0].instance_uid))
-    fullList = sorted(fullList,key = lambda entry : entry[5])
+    #fullList = sorted(fullList,key = lambda entry : entry[5])
     zippedList = [e[0] for e in fullList]
     base = [e[1] for e in fullList]
     diff = [e[2][0] for e in fullList]
@@ -485,7 +485,7 @@ if __name__=="__main__":
 
     updateSummaries()
 
-    plotHistory()
+    #plotHistory()
 
     filepath = Path(__file__)
     numeric_solutions = filepath.parent.parent/"instance_solutions" / "numeric_solutions"
