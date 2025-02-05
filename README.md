@@ -1,6 +1,6 @@
 # nonObtuseTri
 
-Solver and visualizer for [CG:SHOP problem 2025](https://cgshop.ibr.cs.tu-bs.de/competition/cg-shop-2025/#problem-description)
+Our winning entry to the competition [CG:SHOP problem 2025](https://cgshop.ibr.cs.tu-bs.de/competition/cg-shop-2025/#problem-description). The accompanying publication will be presented at SoCG 25 and published in its proceedings. This project is a collaboration with Mikkel Abrahamsen, Florestan Brunck, Benedikt Kolbe and André Nusser.
 
 ![alt text](https://github.com/JacobusTheSecond/nonObtuseTri/blob/main/illustration.png?raw=true)
 
