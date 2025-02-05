@@ -2,11 +2,12 @@ import copy
 import itertools
 import time
 import traceback
+from pathlib import Path
 
 import numpy as np
 import matplotlib.ticker
 import matplotlib.pyplot as plt
-from cgshop2025_pyutils import Cgshop2025Solution, Cgshop2025Instance
+from cgshop2025_pyutils import Cgshop2025Solution, Cgshop2025Instance, ZipWriter
 from cgshop2025_pyutils.geometry import FieldNumber, Point, Segment
 
 import exact_geometry as eg
@@ -114,7 +115,7 @@ class Triangulation:
         self.seed = seed
         self.plotTime = 0.005
         self.axs = axs[0]
-        self.plotWithIds = True#self.withValidate
+        self.plotWithIds = self.withValidate
 
         self.circlesUpdatedAfterModification = False
         self.linksUpdatedAfterModification = False
@@ -378,7 +379,7 @@ class Triangulation:
         if self.axs == None:
             return
         self.axs.clear()
-        self.axs.set_facecolor('lightgray')
+        #self.axs.set_facecolor('lightgray')
         SC = self.getNumSteiner()
         name = ""
         badCount = 0
@@ -389,45 +390,57 @@ class Triangulation:
 
         nonsuperseeded = self.getNonSuperseededBadTris()
 
-        for triIdx in self.validTriIdxs():
-            tri = self.triangles[triIdx]
-            cords = self.numericVerts[tri]
-            cords = np.concatenate((cords, [cords[0]]))
-            for i in range(3):
-                if ((self.triangles[triIdx][(i + 1) % 3] >= self.instanceSize) and (
-                        self.triangles[triIdx][(i + 2) % 3] >= self.instanceSize) and
-                        (self.edgeTopologyChanged[triIdx, i] or (
-                                self.triangleMap[triIdx, i, 0] != outerFace and self.edgeTopologyChanged[
-                            self.triangleMap[triIdx, i, 0], self.triangleMap[triIdx, i, 1]]))):
-                    self.axs.plot(*cords[[(i + 1) % 3, (i + 2) % 3]].T, color='black', linewidth=1, zorder=98,
-                                  linestyle="dotted")
-                else:
-                    self.axs.plot(*cords[[(i + 1) % 3, (i + 2) % 3]].T, color='black', linewidth=1, zorder=98)
-            if self.isBad(triIdx):
-                badCount += 1
-                if triIdx in nonsuperseeded:
-                    t = plt.Polygon(self.numericVerts[tri], color='mediumorchid')
-                    self.axs.add_patch(t)
-                else:
-                    t = plt.Polygon(self.numericVerts[tri], color='orchid')
-                    self.axs.add_patch(t)
+        withTris = False
+        if withTris:
+            for triIdx in self.validTriIdxs():
+                tri = self.triangles[triIdx]
+                cords = self.numericVerts[tri]
+                cords = np.concatenate((cords, [cords[0]]))
+                for i in range(3):
+                    if ((self.triangles[triIdx][(i + 1) % 3] >= self.instanceSize) and (
+                            self.triangles[triIdx][(i + 2) % 3] >= self.instanceSize) and
+                            (self.edgeTopologyChanged[triIdx, i] or (
+                                    self.triangleMap[triIdx, i, 0] != outerFace and self.edgeTopologyChanged[
+                                self.triangleMap[triIdx, i, 0], self.triangleMap[triIdx, i, 1]]))):
 
-            else:
-                t = plt.Polygon(self.numericVerts[tri], color='palegoldenrod')
-                self.axs.add_patch(t)
-            midX = (self.numericVerts[tri[0]][0] + self.numericVerts[tri[1]][0] + self.numericVerts[tri[2]][0]) / 3
-            midY = (self.numericVerts[tri[0]][1] + self.numericVerts[tri[1]][1] + self.numericVerts[tri[2]][1]) / 3
-            if self.plotWithIds:
-                if self.triangleChanged[triIdx]:
-                    self.axs.text(midX, midY, str(triIdx), ha="center", va="center", fontsize=6, color="red")
+                        #changed for plotting purpose
+                        self.axs.plot(*cords[[(i + 1) % 3, (i + 2) % 3]].T, color='black', linewidth=1, zorder=98)
+                        #self.axs.plot(*cords[[(i + 1) % 3, (i + 2) % 3]].T, color='black', linewidth=1, zorder=98,linestyle="dotted")
+                    else:
+                        self.axs.plot(*cords[[(i + 1) % 3, (i + 2) % 3]].T, color='black', linewidth=1, zorder=98)
+                if self.isBad(triIdx):
+                    badCount += 1
+                    if triIdx in nonsuperseeded:
+                        #changed for plotting purposes
+                        #t = plt.Polygon(self.numericVerts[tri], color='mediumorchid')
+                        t = plt.Polygon(self.numericVerts[tri], color='lightcoral')
+                        self.axs.add_patch(t)
+                    else:
+                        # changed for plotting purposes
+                        #t = plt.Polygon(self.numericVerts[tri], color='orchid')
+                        t = plt.Polygon(self.numericVerts[tri], color='lightcoral')
+                        self.axs.add_patch(t)
+
                 else:
-                    self.axs.text(midX, midY, str(triIdx), ha="center", va="center", fontsize=6, color="black")
+                    #changed for plotting purposes
+                    pass
+                    #t = plt.Polygon(self.numericVerts[tri], color='palegoldenrod')
+                    #self.axs.add_patch(t)
+                midX = (self.numericVerts[tri[0]][0] + self.numericVerts[tri[1]][0] + self.numericVerts[tri[2]][0]) / 3
+                midY = (self.numericVerts[tri[0]][1] + self.numericVerts[tri[1]][1] + self.numericVerts[tri[2]][1]) / 3
+                if self.plotWithIds:
+                    if self.triangleChanged[triIdx]:
+                        self.axs.text(midX, midY, str(triIdx), ha="center", va="center", fontsize=6, color="red")
+                    else:
+                        self.axs.text(midX, midY, str(triIdx), ha="center", va="center", fontsize=6, color="black")
         name += " (>90°: " + str(badCount) + ")"
 
         for edgeId in range(len(self.segments)):
             e = self.segments[edgeId]
             t = self.segmentType[edgeId]
-            color = 'blue' if t else 'forestgreen'
+
+            #changed for plotting purposes
+            color = 'indigo' if t else 'mediumspringgreen'
             self.axs.plot(*(self.numericVerts[e].T), color=color, linewidth=2, zorder=99)
         minSize = 20
         maxSize = 40
@@ -3781,7 +3794,7 @@ class QualityImprover:
         logging.info(" "*(10-(3*depth))+str(result))
         return result
 
-    def improve(self,circlepatch = None,dieAt = None,maxRounds=None,maxDepth=2):
+    def improve(self,circlepatch = None,dieAt = None,maxRounds=None,maxDepth=2,storeHistory=False):
 
         #TODO list:
         # - geometric problems should be hashed by inside AND outside, not just inside. maybe even the parameters of the solver?
@@ -3802,6 +3815,15 @@ class QualityImprover:
         self.convergenceDetectorDict = dict()
         convergenceEndCounter = 0
         while keepGoing and (maxRounds is None or round < maxRounds) and (dieAt is None or (self.tri.getNumSteiner() < dieAt)):
+
+            if storeHistory:
+                asSolution = self.tri.solutionParse()
+                curfile = Path(__file__).parent.parent / "history" /f"{round}.zip"
+                if curfile.exists():
+                    curfile.unlink()
+                with ZipWriter(curfile) as zw:
+                    zw.add_solution(asSolution)
+
             #logging.info("----- ACTIONSTACK -----")
             #for a in actionStack:
             #    logging.info(str([(float(p.x()),float(p.y())) for p in a.addedPoints]))
@@ -3950,6 +3972,14 @@ class QualityImprover:
             self.tri.axs.add_patch(circlepatch)
         plt.draw()
         plt.pause(self.tri.plotTime)
+
+        if storeHistory:
+            asSolution = self.tri.solutionParse()
+            curfile = Path(__file__).parent.parent / "history" / f"{round}.zip"
+            if curfile.exists():
+                curfile.unlink()
+            with ZipWriter(curfile) as zw:
+                zw.add_solution(asSolution)
 
         self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)
         plt.pause(0.5)
