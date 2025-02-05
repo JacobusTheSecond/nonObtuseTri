@@ -4,6 +4,8 @@ Our winning entry to the competition [CG:SHOP problem 2025](https://cgshop.ibr.c
 
 ![alt text](https://github.com/JacobusTheSecond/nonObtuseTri/blob/main/illustration.png?raw=true)
 
+This README is slightly out of date. Will hopefully be fixed soon.
+
 ## The Visualizer
 ### Prerequisites
 The Visualizer does not depend on the modified `triangle` library. Simply install the CG:SHOP pyutils:
