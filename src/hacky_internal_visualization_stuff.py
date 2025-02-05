@@ -170,7 +170,32 @@ def get_angle_plot(line1, line2, offset = 1, color = None, origin = [0,0], len_x
 
     return matplotlib.patches.Arc(origin, len_x_axis*offset, len_y_axis*offset, angle=0, theta1=theta1, theta2=theta2, color=color)
 
-def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solution : Cgshop2025Solution,result : VerificationResult,prefix=""):
+def plot_instance(ax:matplotlib.axes.Axes, instance : Cgshop2025Instance):
+    ax.scatter(instance.points_x,instance.points_y,color="black",s=10,zorder=100)
+
+    for i in range(len(instance.region_boundary)):
+        x1, y1 = (
+            instance.points_x[instance.region_boundary[i]],
+            instance.points_y[instance.region_boundary[i]],
+        )
+        x2, y2 = (
+            instance.points_x[
+                instance.region_boundary[(i + 1) % len(instance.region_boundary)]
+            ],
+            instance.points_y[
+                instance.region_boundary[(i + 1) % len(instance.region_boundary)]
+            ],
+        )
+        ax.plot([x1, x2], [y1, y2], color="indigo",linewidth=3)
+        # Plot constraints
+    for constraint in instance.additional_constraints:
+        x1, y1 = instance.points_x[constraint[0]], instance.points_y[constraint[0]]
+        x2, y2 = instance.points_x[constraint[1]], instance.points_y[constraint[1]]
+        ax.plot([x1, x2], [y1, y2], color="mediumspringgreen",linewidth=3)
+
+    ax.set_aspect("equal")
+
+def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solution : Cgshop2025Solution,result : VerificationResult,prefix="",withNames=True):
     ax.scatter(instance.points_x,instance.points_y,color="black",s=10,zorder=100)
 
     exactPoints = [Point(instance.points_x[i],instance.points_y[i]) for i in range(len(instance.points_x))] + [Point(FieldNumber(solution.steiner_points_x[i]),FieldNumber(solution.steiner_points_y[i])) for i in range(len(solution.steiner_points_x))]
@@ -208,4 +233,5 @@ def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solutio
         ax.plot([x1, x2], [y1, y2], color="black",zorder=-1)
 
     ax.set_aspect("equal")
-    ax.set_title(prefix+" #Steiner:"+str(len(steinery))+" #non-obtuse:"+str(result.num_obtuse_triangles))
+    if withNames:
+        ax.set_title(prefix+" #Steiner:"+str(len(steinery))+" #non-obtuse:"+str(result.num_obtuse_triangles))
