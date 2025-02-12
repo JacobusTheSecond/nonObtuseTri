@@ -62,8 +62,8 @@ def solveEveryInstance(solname="cur_solution.zip"):
     #PoolWorker - 69
     #' parent=860322 started daemon> (22): working on instanceId 67 of name simple-polygon-exterior-20_20_0f96fb2c with seed 51645591 FAILED WITH AN ERROR
     debugSeed = None#51645591#754181797#267012647
-    debugIdxs = None#[125]#[114]#64#7#8#88
-    debugUID = "simple-polygon-exterior-20_10_868921c7"#"simple-polygon-exterior-20_20_0f96fb2c"#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
+    debugIdxs = [1]#[125]#[114]#64#7#8#88
+    debugUID = None#"simple-polygon-exterior-20_10_868921c7"#"simple-polygon-exterior-20_20_0f96fb2c"#"simple-polygon-exterior-20_10_8c4306da"#point-set_10_13860916"
     withShow = True#True#True#True#(debugIdx != None) or (debugUID != None)
     if withShow:
         matplotlib.use("TkAgg")

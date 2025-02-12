@@ -390,7 +390,7 @@ class Triangulation:
 
         nonsuperseeded = self.getNonSuperseededBadTris()
 
-        withTris = False
+        withTris = True
         if withTris:
             for triIdx in self.validTriIdxs():
                 tri = self.triangles[triIdx]
