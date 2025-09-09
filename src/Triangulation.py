@@ -430,9 +430,9 @@ class Triangulation:
                 midY = (self.numericVerts[tri[0]][1] + self.numericVerts[tri[1]][1] + self.numericVerts[tri[2]][1]) / 3
                 if self.plotWithIds:
                     if self.triangleChanged[triIdx]:
-                        self.axs.text(midX, midY, str(triIdx), ha="center", va="center", fontsize=6, color="red")
+                        self.axs.text(midX, midY, f"{triIdx} ({self.uniqueTriangleIDs[triIdx]})", ha="center", va="center", fontsize=6, color="red")
                     else:
-                        self.axs.text(midX, midY, str(triIdx), ha="center", va="center", fontsize=6, color="black")
+                        self.axs.text(midX, midY, f"{triIdx} ({self.uniqueTriangleIDs[triIdx]})", ha="center", va="center", fontsize=6, color="black")
         name += " (>90°: " + str(badCount) + ")"
 
         for edgeId in range(len(self.segments)):
@@ -1462,7 +1462,7 @@ class Triangulation:
         for id in self.generatingCircleSet:
             if id not in newSet:
                 removeSet.add(id)
-
+        #TODO: critical bug!! this does not correctly update the circle intersection list...
         addSet = set()
         for id in self.validTriIdxs():
             if not self.badTris[id]:
@@ -1479,10 +1479,15 @@ class Triangulation:
         if self.circlesUpdatedAfterModification:
             logging.info("circle update skipped, because already up to date")
             return
-        if len(self.hitCircles) == 0:
+        #TODO: fix bug
+        withoutBuggy = True
+        if withoutBuggy:
             self._generateGeometricCircleProblems()
         else:
-            self._updateGeometricCircleProblems()
+            if len(self.hitCircles) == 0:
+                self._generateGeometricCircleProblems()
+            else:
+                self._updateGeometricCircleProblems()
 
         self.rebaseTriangleState()
         self.circlesUpdatedAfterModification = True
@@ -3382,7 +3387,7 @@ def safeDiv(time,count):
 class QualityImprover:
     def __init__(self, tri: Triangulation,seed=None):
         self.tri = tri
-        self.solver = StarSolver(2,1,1,1.25,2,2,1)
+        self.solver = StarSolver(2,1,1,1.25,2,0,0)#2,1)
         if seed != None:
             np.random.seed(seed)
         self.seed = seed
@@ -3589,7 +3594,7 @@ class QualityImprover:
         #numSteinerHistory.append(len(self.tri.validVertIdxs()) - self.tri.instanceSize)
         #numBadTriHistory.append(len(np.where(self.tri.badTris == True)[0]))
         #return len(self.tri.validVertIdxs()) - self.tri.instanceSize + len(np.where(self.tri.badTris == True)[0])
-        return len(self.tri.validVertIdxs()) - self.tri.instanceSize + 2* len(self.tri.getNonSuperseededBadTris()) + 1.1*len(np.where(self.tri.badTris == True)[0])
+        return len(self.tri.validVertIdxs()) - self.tri.instanceSize + 2 * len(self.tri.getNonSuperseededBadTris()) + 1.1*len(np.where(self.tri.badTris == True)[0])
 
     def solveEveryGP(self):
         for gp in self.tri.geometricSubproblemIterator():
@@ -3794,7 +3799,7 @@ class QualityImprover:
         logging.info(" "*(10-(3*depth))+str(result))
         return result
 
-    def improve(self,circlepatch = None,dieAt = None,maxRounds=None,maxDepth=2,storeHistory=False):
+    def improve(self,circlepatch = None,dieAt = None,maxRounds=None,maxDepth=2,storeHistory=False,instance=None):
 
         #TODO list:
         # - geometric problems should be hashed by inside AND outside, not just inside. maybe even the parameters of the solver?
@@ -3902,6 +3907,7 @@ class QualityImprover:
             #    i+=1
             #    betterEvalActionPairs.append((self.realEvalAction(action,depth),action))
             #self.tri.updateGeometricProblems()
+
             maxConvergenceThisRound = -1
             betterEvalActionPairs = sorted(list(zip(actionValues,[action for _,action,_ in actionList])),key=lambda x:x[0])
             logging.info("+-------------------------------------------------------------------------------------")
@@ -3943,6 +3949,14 @@ class QualityImprover:
                 logging.info("terminal action applied")
             else:
                 logging.error("failed to add action...")
+            if self.uniqueIDManager.nextId > 1000000:
+                logging.info("resetting uniqueIDManager")
+                steinerpoints = [self.tri.point(idx) for idx in self.tri.validVertIdxs() if idx >= self.tri.instanceSize]
+                self.tri = Triangulation(instance,self.tri.withValidate, self.seed,
+                                    [self.tri.axs, self.tri.histoaxs, self.tri.histoaxtwin, self.tri.internalaxs, self.tri.gpaxs], True,
+                                    steinerpoints)
+                self.uniqueIDManager = self.tri.uniqueIDManager
+                #self.tri.__init__(instance, )
             #print(self.tri.watch)
             self.tri.watch=0
             self.plotHistory(numSteinerHistory,numBadTriHistory,round,specialRounds,self.tri.histoaxs,self.tri.histoaxtwin)

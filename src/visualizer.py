@@ -2,8 +2,10 @@ import logging
 
 import matplotlib.pyplot as plt
 import matplotlib
+
 from sqlalchemy.testing import against
 
+from src.Triangulation import Triangulation
 from src.solutionManagement import updateSummaries
 
 matplotlib.use("TkAgg")
@@ -15,6 +17,9 @@ from hacky_internal_visualization_stuff import plot_solution, plot_instance
 from solutionManagement import loadSolutions, triangulationFromSolution
 from exact_geometry import dot
 from constants import noneEdge
+
+import seaborn as sns
+import pandas as pd
 
 
 def verifyAll(solname="solutions.zip"):
@@ -90,10 +95,20 @@ def updatePlot(ax1,ax2,ax3,diff,diffHeat,zippedList,idb,name,baseName):
     ax1.set_title(instance.instance_uid)
 
 def plotByType(solutions):
+    plt.rcParams["text.usetex"]=True
+    plt.rc("font",**{"family":"serif","serif":["Computer Modern Roman"],"monospace":["Computer Modern Typewriter"],'size': 20})
+
+    #plt.rcParams["monospace"]="Computer Modern Typewriter"
     logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
 
     filepath = Path(__file__)
     idb = InstanceDatabase(filepath.parent.parent/"challenge_instances_cgshop25"/"zips"/"challenge_instances_cgshop25_rev1.zip")
+
+    numCons1 = [len(instance.additional_constraints) for instance in idb]
+    numCons2 = [len(instance.region_boundary)+len(instance.additional_constraints) for instance in idb]
+    print(max(numCons1),max(numCons2))
+    #for instance in idb:
+    #    print(f"{instance.instance_uid}: {len(instance.points_x)},{len(instance.region_boundary)+len(instance.additional_constraints)}")
 
     bests = []
     for name in solutions:
@@ -108,11 +123,17 @@ def plotByType(solutions):
                 #logging.info(str(solname)+" is better at "+str(sol.instance_uid) +" with solution size "+str(len(sol.steiner_points_x)))
             i += 1
 
+
+    ids = list(range(150))
+    #ids = [i for i in range(150) if "ortho" not in bests[i][0].instance_uid]
     triangulations = []
     anglelist = []
     constraintList = []
+    i = 0
     for best,_ in bests:
-        triangulations.append(triangulationFromSolution(idb[best.instance_uid],best,[None,None,None,None,None]))
+        if i in ids:
+            triangulations.append(triangulationFromSolution(idb[best.instance_uid],best,[None,None,None,None,None]))
+        i += 1
 
     def primitiveAngle(a,b,c):
         dotprod = float(dot(a-b,c-b))
@@ -137,20 +158,141 @@ def plotByType(solutions):
 
 
             triIdx += 1
+        args = np.argsort(-np.array(myAngleTrios))
+        anglelist.append(list(np.take_along_axis(np.array(myAngleTrios),args,axis=-1)))
+        constraintList.append(list(np.take_along_axis(np.array(myOnConstraint),args,axis=-1)))
 
-        anglelist.append(myAngleTrios)
-        constraintList.append(myOnConstraint)
+    #fig,ax = plt.subplots()
 
-    ids = list(range(10))
 
-    fig,ax = plt.subplots()
+    xs = []
+    ys = []
+    xMask = []
+    yMask = []
+    for id in range(len(anglelist)):
+        sortedArgs = np.argsort(np.array(anglelist[id])[:,0])
+        angles = np.array(anglelist[id])[sortedArgs]
+        constraints = np.array(constraintList[id])[sortedArgs]
+
+        xs += list(angles[:,0])
+        ys += list(angles[:,2])
+
+    # Create a Figure, which doesn't have to be square.
+    fig = plt.figure(layout='constrained')
+    shared_ax = fig.add_gridspec(top=0.75, right=0.75).subplots()
+    shared_ax.set_aspect("equal")
+    plotoffset = 0.025
+    plotheight = 0.2
+    step = 1/3
+
+    H, xedges, yedges = np.histogram2d(ys, xs, density=True, bins=(np.arange(0, 60 + step, step), np.arange(60, 90 + step, step)))
+    # H_normalized = H/float(az1.shape[0]) # the integral over the histogrm is 1
+    H_normalized = H # * 100 / sum(sum(H))  # the max value of the histogrm is 1
+    extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+
+    im = shared_ax.imshow(H_normalized.T, extent=extent,interpolation='none', origin='lower',norm=matplotlib.colors.LogNorm(),cmap=sns.color_palette("rocket_r", as_cmap=True))
+    #fig.colorbar(im, ax=axes[1])
+
+    shared_ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:0.0f}°"))
+    shared_ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:0.0f}°"))
+    shared_ax.set_yticks(np.arange(60, 91, 5))
+    shared_ax.set_xticks(np.arange(0, 61, 5))
+
+    shared_ax.set_xlabel("Smallest angle")
+    shared_ax.set_ylabel("Largest angle")
+
+    xhist = np.histogram(ys,bins=np.arange(0,60+step,step))
+    yhist = np.histogram(xs,bins=np.arange(60,90+step,step))
+    frac = np.max(xhist[0])/np.max(yhist[0])
+
+    ax_histx = shared_ax.inset_axes([0, 1 + (2*plotoffset), 1, 2*frac*plotheight], sharex=shared_ax)
+    ax_histy = shared_ax.inset_axes([1 + plotoffset, 0, plotheight, 1], sharey=shared_ax)
+    ax_histx.set_axis_off()
+    ax_histy.set_axis_off()
+
+    colorbarax = shared_ax.inset_axes([0,0,0.4,0.1])
+    colorbarax.set_axis_off()
+
+    def my_formatter(x, pos):
+        """Format 1 as 1, 0 as 0, and all values whose absolute values is between
+        0 and 1 without the leading "0." (e.g., 0.7 is formatted as .7 and -0.4 is
+        formatted as -.4)."""
+        val_str = None
+        if x < 0.01:
+            val_str = f'{100*x}\%'
+        else:
+            val_str = f'{int(100*x)}\%'
+        return val_str
+
+
+    b = fig.colorbar(im,aspect=10,ax=colorbarax,orientation="horizontal",location="top",fraction=1,format=matplotlib.ticker.FuncFormatter(my_formatter))
+
+    xcounts,xbins,xbars = ax_histx.hist(ys,bins=np.arange(0,60+step,step),color=sns.color_palette("rocket").as_hex()[1],edgecolor="black")
+    ycounts,ybins,ybars = ax_histy.hist(xs,bins=np.arange(60,90+step,step),orientation="horizontal",color=sns.color_palette("rocket").as_hex()[1],edgecolor="black")
+    #ax_histx.set_ylim((0.0, ax_histy.get_xlim()[1]/2))
+    maximum = np.max(ycounts)
+    norm = matplotlib.colors.LogNorm(vmin=1,vmax=100)
+    #norm = lambda x : x/maximum
+    colorBars = False
+    if colorBars:
+        for i, (xcnt, xvalue, xbar) in enumerate(zip(xcounts, xbins, xbars)):
+            if xcnt == 0:
+                xbar.set_facecolor(sns.color_palette("rocket_r", as_cmap=True)(norm(0)))
+            else:
+                xbar.set_facecolor(sns.color_palette("rocket_r", as_cmap=True)(norm(1+(99*(xcnt-1)/maximum))))
+
+        for i, (ycnt, yvalue, ybar) in enumerate(zip(ycounts, ybins, ybars)):
+            if ycnt == 0:
+                ybar.set_facecolor(sns.color_palette("rocket_r", as_cmap=True)(norm(0)))
+            else:
+                ybar.set_facecolor(sns.color_palette("rocket_r", as_cmap=True)(norm(1+(99*(ycnt-1)/maximum))))
+
+
+
+    plt.show()
+
+    ax.clear()
+    plt.style.use('_mpl-gallery-nogrid')
+    step = 1
+    g = sns.jointplot(x=ys,y=xs,kind="hist",ratio=2,xlim=(0, 60), ylim=(60, 90),joint_kws=dict(bins=(np.arange(0, 60 + step, step), np.arange(60, 90 + step, step))))
+    #ax.hist2d(ys, xs, bins=(np.arange(0, 60 + step, step), np.arange(60, 90 + step, step)))
+    # ax.set(xlim=(0, 90), ylim=(0, 90))
+    #ax.set_aspect("equal")
+    g.ax_joint.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:0.0f}°"))
+    g.ax_joint.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:0.0f}°"))
+    g.ax_joint.set_yticks(np.arange(60, 91, 5))
+    g.ax_joint.set_xticks(np.arange(0, 61, 5))
+    g.ax_joint.set_xlabel("Smallest angle")
+    g.ax_joint.set_ylabel("Largest angle")
+    g.ax_marg_x.set_ylim((0.0, g.ax_marg_y.get_xlim()[1]/2))
+    #g.ax_joint.set_aspect("equal")
+
+    plt.show()
 
     showCalled = False
     for id in ids:
         sol,_ = bests[id]
-        angles = anglelist[id]
-        constraints = constraintList[id]
+        sortedArgs = np.argsort(np.array(anglelist[id])[:,0])
+        angles = np.array(anglelist[id])[sortedArgs]
+        constraints = np.array(constraintList[id])[sortedArgs]
+        hatches = np.where(constraints,"//////","")
 
+        ax.clear()
+        ax.bar(range(len(angles)),angles[:,0],width=1.0,edgecolor="black",hatch=hatches[:,0],color=sns.color_palette("Set2",3).as_hex()[1],linewidth=0.5)
+        ax.bar(range(len(angles)),angles[:,1],bottom=angles[:,0],width=1.0,edgecolor="black",hatch=hatches[:,1],color=sns.color_palette("Set2",3).as_hex()[0],linewidth=0.5)
+        ax.bar(range(len(angles)),angles[:,2],bottom=angles[:,0]+angles[:,1],width=1.0,edgecolor="black",hatch=hatches[:,2],color=sns.color_palette("Set2",3).as_hex()[2],linewidth=0.5)
+        ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:0.0f}°"))
+        ax.set_yticks([0,60,90,120,180])
+        ax.set_xticks([])
+        ax.set_xlim([-0.5,len(angles)-0.5])
+        ax.plot([-0.5,len(angles)-0.5],[90,90],c="red",linewidth=2)
+        ax.set_ylim([0,180])
+        matplotlib.rcParams['axes.spines.left'] = False
+        matplotlib.rcParams['axes.spines.right'] = False
+        matplotlib.rcParams['axes.spines.top'] = False
+        matplotlib.rcParams['axes.spines.bottom'] = False
+        fig.tight_layout()
+        ax.get_yticklabels()[2].set_color("red")
 
         ax.clear()
         fig.canvas.manager.set_window_title(f"{sol.instance_uid}_histogram")
@@ -172,7 +314,7 @@ def plotByType(solutions):
             showCalled = True
 
         #ax.set_ylim((0,70))
-
+        ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:0.0f}°"))
         plt.draw()
         fig.tight_layout()
         ax.clear()
@@ -223,10 +365,9 @@ def plotByType(solutions):
 
 
 
-
-
     buckets = dict()
     keys = ["simple-polygon-exterior","point-set","ortho","simple-polygon"]
+    keyOffsets = {keys[0]:-3,keys[1]:-1,keys[2]:1,keys[3]:3}
     for k in keys:
         buckets[k] = []
 
@@ -244,7 +385,47 @@ def plotByType(solutions):
         if not handled:
             print("uh oh...")
 
+    data = {'Number of points in instance':[],'Instance type':[],'Number of Steiner points':[]}
+    for k in keys:
+        for x,y in buckets[k]:
+            data['Number of points in instance'].append(x)
+            data['Number of Steiner points'].append(y)
+            data['Instance type'].append(k)
+
+    df = pd.DataFrame(data)
+
+
     fig,ax = plt.subplots()
+    def formatter(s):
+        print("formatter called")
+        return rf"$\texttt{{{s}}}$"
+    sns.boxplot(x='Number of points in instance',y='Number of Steiner points',data=df,hue='Instance type',palette=["white","white","white","white"],ax=ax,native_scale=True,showfliers=False,legend=False,zorder=1)
+    sns.boxplot(x='Number of points in instance',y='Number of Steiner points',data=df,hue='Instance type',palette='Set2',ax=ax,native_scale=True,showfliers=False,boxprops={"alpha":0.5},zorder=1,formatter=formatter)
+    sns.boxplot(x='Number of points in instance',y='Number of Steiner points',data=df,hue='Instance type',palette='Set2',ax=ax,native_scale=True,showfliers=False,boxprops={"fill":None},legend=False,zorder=3)
+    offsets = []
+    for type in df['Instance type']:
+        offsets.append(keyOffsets[type])
+    df['Number of points in instance'] += offsets
+    sns.swarmplot(x='Number of points in instance',y='Number of Steiner points',data=df,hue='Instance type',palette='Set2',ax=ax,native_scale=True,legend=False,zorder=2)
+
+    i = 0
+    np.set_printoptions(precision=2)
+    for k in keys:
+
+        xs = [item[0] for item in buckets[k]]
+        ys = [item[1] for item in buckets[k]]
+        sign = "+" if np.poly1d(np.polyfit(xs,ys,1))[0] >= 0 else ""
+        sns.lineplot(x=np.unique(xs)+keyOffsets[k],y=np.poly1d(np.polyfit(xs,ys,1))(np.unique(xs)),label=rf"${np.poly1d(np.polyfit(xs,ys,1))[1]:.2f} x {sign} {np.poly1d(np.polyfit(xs,ys,1))[0]:.2f}$",zorder=-1,color=sns.color_palette("Set2",4).as_hex()[i],linestyle="dashed")
+        ax.set_xticks(np.unique(xs))
+        i += 1
+    #texts = plt.legend().texts
+    L = plt.legend(ncol=2)
+    for i in range(4):
+        L.get_texts()[i].set_text(formatter(keys[i]))
+    #plt.legend(ncol=2)
+    fig.tight_layout()
+    #ax.set_xscale("log")
+    #ax.set_yscale("log")
     plt.show()
     for k in keys:
 
@@ -450,9 +631,12 @@ def compareSolutions(base,others):
     otherAx.clear()
     plot_instance(otherAx, instance)
     otherotherAx.clear()
+    triangulation = Triangulation(instance, withValidate=False, seed=None, axs=[otherotherAx,None,None,None,None])
+    sol2 = triangulation.solutionParse()
     result2 = verify(instance, sol2)
     # print(f"{solution.instance_uid}: {result}")
-    plot_solution(otherotherAx, instance, sol2, result2,withNames=False)
+    triangulation.plotTriangulation()
+    #plot_solution(otherotherAx, instance, sol2, result2,withNames=False)
     otherAx.axis("off")
     fig2.tight_layout()
     otherotherAx.axis("off")
@@ -479,6 +663,7 @@ def plotHistory():
             fig.canvas.manager.set_window_title(f"{i}")
             fig.tight_layout()
             plt.draw()
+            print(len(tr.validVertIdxs()) - tr.instanceSize + 2 * len(tr.getNonSuperseededBadTris()) + 1.1*len(np.where(tr.badTris == True)[0]))
             plt.pause(0.1)
 
 def resultSummary():
@@ -651,6 +836,8 @@ simple-polygon-exterior-20_40_8ad14096 	0 	37 	0 	37 	39 	0 	39 	0 	34 	31 	0 	4
 
 if __name__=="__main__":
 
+
+
     resultSummary()
 
     #showSolutions()
@@ -690,11 +877,11 @@ if __name__=="__main__":
 
     #compareSolutions(base=[v for v in seeded.iterdir() if len([w for w in out.iterdir() if v.name == w.name])>0],others=[v for v in out.iterdir()])
     againstMergeBak = False
-    #plotByType([numeric_solutions])#[merged,merged_3,merged_5,merged_bak,mergemerge])
+    #plotByType([mergemerge,merged,merged_3,merged_5])#[merged,merged_3,merged_5,merged_bak,mergemerge])
     if againstMergeBak:
-        compareSolutions(others=[mergemerge],base=[merged,merged_3,merged_5])#
+        compareSolutions(others=[mergemerge],base=[new5])#
     else:
-        compareSolutions(others=[merged,merged_3,merged_5,merged_bak,mergemerge],base=[new1,new2,new3Old,new3,new4,new5])  #
+        compareSolutions(others=[new5],base=[new1])  #
         #compareSolutions(others=[new5, new4, new3, new3Old],base= allexceptnumeric)  #
 
     #compareSolutions(base=[v for v in seeded.iterdir()],others=[v for v in out.iterdir()])

@@ -171,7 +171,7 @@ def get_angle_plot(line1, line2, offset = 1, color = None, origin = [0,0], len_x
     return matplotlib.patches.Arc(origin, len_x_axis*offset, len_y_axis*offset, angle=0, theta1=theta1, theta2=theta2, color=color)
 
 def plot_instance(ax:matplotlib.axes.Axes, instance : Cgshop2025Instance):
-    ax.scatter(instance.points_x,instance.points_y,color="black",s=10,zorder=100)
+    ax.scatter(instance.points_x,instance.points_y,color="black",s=40,zorder=100)
 
     for i in range(len(instance.region_boundary)):
         x1, y1 = (
@@ -196,7 +196,7 @@ def plot_instance(ax:matplotlib.axes.Axes, instance : Cgshop2025Instance):
     ax.set_aspect("equal")
 
 def plot_solution(ax:matplotlib.axes.Axes,instance : Cgshop2025Instance, solution : Cgshop2025Solution,result : VerificationResult,prefix="",withNames=True):
-    ax.scatter(instance.points_x,instance.points_y,color="black",s=10,zorder=100)
+    ax.scatter(instance.points_x,instance.points_y,color="black",s=40,zorder=100)
 
     exactPoints = [Point(instance.points_x[i],instance.points_y[i]) for i in range(len(instance.points_x))] + [Point(FieldNumber(solution.steiner_points_x[i]),FieldNumber(solution.steiner_points_y[i])) for i in range(len(solution.steiner_points_x))]
 
